@@ -153,7 +153,7 @@ proc viewHelpPage*(self: WhiteboxTools, toolName: string): string =
     ## for a specific tool on the projects source code repository. 
     let tn = fmt"{toolName[0].toUpperAscii()}{toolName[1..<len(toolName)]}"
     let d = "https://jblindsay.github.io/wbt_book/available_tools/"
-    var toolbox = self.getToolbox(tn).replace(" ", "_").toLowerAscii()
+    var toolbox = self.getToolbox(tn).replace(" ", "_").replace("/", "_").toLowerAscii()
     if toolbox == "math_and_stats_tools":
         toolbox = "mathand_stats_tools"
     result = fmt"{d}{toolbox}.html#{tn}"
@@ -7575,7 +7575,7 @@ proc zonalStatistics*(self: var WhiteboxTools, input: string, features: string, 
     args.add(fmt"--stat={stat}")
     args.add(fmt"--out_table={out_table}")
     self.runTool("ZonalStatistics", args)
-
+    
 proc generateFunctions() =
     var 
         wbt = newWhiteboxTools()
