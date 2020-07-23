@@ -9,44 +9,44 @@ import browsers, json, options, os, osproc, streams, strformat, strutils
 ## must be copied into the same folder as this code.
 ## 
 ## .. code-block:: nim
-## import wbt_nim
-## import options, strformat, strutils
-##
-## proc main() =
+##   import wbt_nim
+##   import options, strformat, strutils
+##  
+##   proc main() =
 ##     # Create a new WhiteboxTools object
 ##     var wbt = newWhiteboxTools()
-##
+##  
 ##     # Tell the wbt object where to find the WhiteboxTools executable.
 ##     # If you don't do this, it assumes that it is in the same directory as 
 ##     # your Nim code.
 ##     wbt.setExecutableDirectory("/Users/johnlindsay/Documents/programming/whitebox-tools/")
-##
+##  
 ##     # Set the working directory
 ##     let wd = "/Users/johnlindsay/Documents/data/LakeErieLidar/"
 ##     wbt.setWorkingDirectory(wd)
-##
+##  
 ##     # Set the verbose mode. By default it is 'true', which prints all output
 ##     # from WBT. If you need to make it less chatty, set it to false.
 ##     wbt.setVerboseMode(false)
-##
+##  
 ##     # By default, all GeoTiff outputs of tools will be compressed. You can 
 ##     # modify this with the following:
 ##     wbt.setCompressRasters(false)
-##
+##  
 ##     # Print out the version of WBT:
 ##     echo(wbt.getVersionInfo())
-##
+##  
 ##     # WhiteboxTools is open-access software. If you'd like to see the source 
 ##     # code for any tool, simply use the following:
 ##     discard wbt.viewCode("balanceContrastEnhancement")
-##
+##  
 ##     # To get a brief description of a tool and it's parameters:
 ##     echo(wbt.getToolHelp("breachDepressionsLeastCost"))
-##
+##  
 ##     # If you'd like to see more detailed help documentation:
 ##     discard wbt.viewHelpPage("breachDepressionsLeastCost")
 ##     # This will open the default browser and navigate to the relevant tool help.
-##
+##  
 ##     # Here's an example of how to run a tool:
 ##     if wbt.hillshade(
 ##         dem="90m_DEM.tif",
@@ -56,9 +56,9 @@ import browsers, json, options, os, osproc, streams, strformat, strutils
 ##         zFactor=1.0
 ##     ) != 0:
 ##         echo("Error while running hillshade.")
-
-#     # If you haven't previously set the working directory, you need to include
-#     # full file path names.
+##  
+##     # If you haven't previously set the working directory, you need to include
+##     # full file path names.
 
 #     # You can capture tool output by creating a custom callback function
 #     proc myCallback(value: string) =
@@ -108,6 +108,8 @@ proc setWorkingDirectory*(self: var WhiteboxTools, wd: string) =
     ## directory, tool input parameters that are files need only
     ## specify the file name rather than the complete file path.
     self.workingDirectory = wd
+    if not self.workingDirectory.endsWith(os.DirSep):
+        self.workingDirectory = self.workingDirectory & os.DirSep
 
 proc getWorkingDirectory*(self: WhiteboxTools): string = 
     ## Returns the current working directory.
@@ -116,6 +118,8 @@ proc getWorkingDirectory*(self: WhiteboxTools): string =
 proc setExecutableDirectory*(self: var WhiteboxTools, dir: string) = 
     ## Sets the directory to the WhiteboxTools executable file.
     self.exePath = dir
+    if not self.exePath.endsWith(os.DirSep):
+        self.exePath = self.exePath & os.DirSep
 
 proc getExecutableDirectory*(self: WhiteboxTools): string = 
     ## Returns the directory to the WhiteboxTools executable file.
@@ -2926,6 +2930,35 @@ proc hypsometricAnalysis*(self: var WhiteboxTools, inputs: string, watershed: st
     args.add(fmt"--output={output}")
     result = self.runTool("HypsometricAnalysis", args)
 
+proc hypsometricallyTintedHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, hs_weight: float = 0.5, brightness: float = 0.5, atmospheric: float = 0.0, palette: string = "atlas", reverse: bool = false, zfactor: float = 1.0, full_mode: bool = false): byte =
+    ## Creates an colour shaded relief image from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#HypsometricallyTintedHillshade) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - altitude: Illumination source altitude in degrees.
+    ## - hs_weight: Weight given to hillshade relative to relief (0.0-1.0).
+    ## - brightness: Brightness factor (0.0-1.0).
+    ## - atmospheric: Atmospheric effects weight (0.0-1.0).
+    ## - palette: Options include 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', and 'deep.
+    ## - reverse: Optional flag indicating whether to use reverse the palette.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    ## - full_mode: Optional flag indicating whether to use full 360-degrees of illumination sources.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--altitude={altitude}")
+    args.add(fmt"--hs_weight={hs_weight}")
+    args.add(fmt"--brightness={brightness}")
+    args.add(fmt"--atmospheric={atmospheric}")
+    args.add(fmt"--palette={palette}")
+    args.add(fmt"--reverse={reverse}")
+    args.add(fmt"--zfactor={zfactor}")
+    args.add(fmt"--full_mode={full_mode}")
+    result = self.runTool("HypsometricallyTintedHillshade", args)
+
 proc idwInterpolation*(self: var WhiteboxTools, input: string, field: string, use_z: bool = false, output: string, weight: float = 2.0, radius = none(float), min_points = none(int), cell_size = none(float), base: string = ""): byte =
     ## Interpolates vector points into a raster surface using an inverse-distance weighted scheme.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis.html#IdwInterpolation) for more details.
@@ -4931,6 +4964,25 @@ proc multiPartToSinglePart*(self: var WhiteboxTools, input: string, output: stri
     args.add(fmt"--output={output}")
     args.add(fmt"--exclude_holes={exclude_holes}")
     result = self.runTool("MultiPartToSinglePart", args)
+
+proc multidirectionalHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, zfactor: float = 1.0, full_mode: bool = false): byte =
+    ## Calculates a multi-direction hillshade raster from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MultidirectionalHillshade) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - altitude: Illumination source altitude in degrees.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    ## - full_mode: Optional flag indicating whether to use full 360-degrees of illumination sources.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--altitude={altitude}")
+    args.add(fmt"--zfactor={zfactor}")
+    args.add(fmt"--full_mode={full_mode}")
+    result = self.runTool("MultidirectionalHillshade", args)
 
 proc multiply*(self: var WhiteboxTools, input1: string, input2: string, output: string): byte =
     ## Performs a multiplication operation on two rasters or a raster and a constant value.
