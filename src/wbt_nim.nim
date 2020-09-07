@@ -238,7 +238,10 @@ proc runTool(self: var WhiteboxTools, toolName: string, toolArgs: seq[string]): 
 
         for a in toolArgs:
             if len(a) > 0:
-                args.add(a)
+                if "Some(" in a:
+                    args.add(a.replace("Some(", "").replace(")"))
+                else:
+                    args.add(a)
 
         if self.verbose:
             echo(fmt"./whitebox_tools {args}")
@@ -469,7 +472,7 @@ proc asciiToLas*(self: var WhiteboxTools, inputs: string, pattern: string, proj:
     args.add(fmt"--proj={proj}")
     result = self.runTool("AsciiToLas", args)
 
-proc aspect*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc aspect*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates an aspect raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Aspect) for more details.
     ##
@@ -481,7 +484,8 @@ proc aspect*(self: var WhiteboxTools, dem: string, output: string, zfactor: floa
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("Aspect", args)
 
 proc atan2*(self: var WhiteboxTools, input_y: string, input_x: string, output: string): byte =
@@ -1781,7 +1785,7 @@ proc downslopeIndex*(self: var WhiteboxTools, dem: string, output: string, drop:
     args.add(fmt"--out_type={out_type}")
     result = self.runTool("DownslopeIndex", args)
 
-proc edgeDensity*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, norm_diff: float = 5.0, zfactor: float = 1.0): byte =
+proc edgeDensity*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, norm_diff: float = 5.0, zfactor = none(float)): byte =
     ## Calculates the density of edges, or breaks-in-slope within DEMs.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#EdgeDensity) for more details.
     ##
@@ -1797,7 +1801,8 @@ proc edgeDensity*(self: var WhiteboxTools, dem: string, output: string, filter: 
     args.add(fmt"--output={output}")
     args.add(fmt"--filter={filter}")
     args.add(fmt"--norm_diff={norm_diff}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("EdgeDensity", args)
 
 proc edgePreservingMeanFilter*(self: var WhiteboxTools, input: string, output: string, filter: int = 11, threshold: float): byte =
@@ -2249,7 +2254,7 @@ proc fastAlmostGaussianFilter*(self: var WhiteboxTools, input: string, output: s
     args.add(fmt"--sigma={sigma}")
     result = self.runTool("FastAlmostGaussianFilter", args)
 
-proc featurePreservingSmoothing*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, norm_diff: float = 15.0, num_iter: int = 3, max_diff: float = 0.5, zfactor: float = 1.0): byte =
+proc featurePreservingSmoothing*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, norm_diff: float = 15.0, num_iter: int = 3, max_diff: float = 0.5, zfactor = none(float)): byte =
     ## Reduces short-scale variation in an input DEM using a modified Sun et al. (2007) algorithm.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#FeaturePreservingSmoothing) for more details.
     ##
@@ -2269,7 +2274,8 @@ proc featurePreservingSmoothing*(self: var WhiteboxTools, dem: string, output: s
     args.add(fmt"--norm_diff={norm_diff}")
     args.add(fmt"--num_iter={num_iter}")
     args.add(fmt"--max_diff={max_diff}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("FeaturePreservingSmoothing", args)
 
 proc fetchAnalysis*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 0.0, hgt_inc: float = 0.05): byte =
@@ -2422,6 +2428,23 @@ proc filterLidarScanAngles*(self: var WhiteboxTools, input: string, output: stri
     args.add(fmt"--output={output}")
     args.add(fmt"--threshold={threshold}")
     result = self.runTool("FilterLidarScanAngles", args)
+
+proc filterRasterFeaturesByArea*(self: var WhiteboxTools, input: string, output: string, threshold: int, background: string = "zero"): byte =
+    ## Removes small-area features from a raster.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis.html#FilterRasterFeaturesByArea) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Input raster file.
+    ## - output: Output raster file.
+    ## - threshold: Remove features with fewer grid cells than this threshold value.
+    ## - background: Background value.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--threshold={threshold}")
+    args.add(fmt"--background={background}")
+    result = self.runTool("FilterRasterFeaturesByArea", args)
 
 proc findFlightlineEdgePoints*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Identifies points along a flightline's edge in a LAS file.
@@ -2785,7 +2808,7 @@ proc highestPosition*(self: var WhiteboxTools, inputs: string, output: string): 
     args.add(fmt"--output={output}")
     result = self.runTool("HighestPosition", args)
 
-proc hillshade*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 315.0, altitude: float = 30.0, zfactor: float = 1.0): byte =
+proc hillshade*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 315.0, altitude: float = 30.0, zfactor = none(float)): byte =
     ## Calculates a hillshade raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Hillshade) for more details.
     ##
@@ -2801,7 +2824,8 @@ proc hillshade*(self: var WhiteboxTools, dem: string, output: string, azimuth: f
     args.add(fmt"--output={output}")
     args.add(fmt"--azimuth={azimuth}")
     args.add(fmt"--altitude={altitude}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("Hillshade", args)
 
 proc hillslopes*(self: var WhiteboxTools, d8_pntr: string, streams: string, output: string, esri_pntr: bool = false): byte =
@@ -2877,7 +2901,7 @@ proc holeProportion*(self: var WhiteboxTools, input: string): byte =
     args.add(fmt"--input={input}")
     result = self.runTool("HoleProportion", args)
 
-proc horizonAngle*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 0.0, max_dist = none(float)): byte =
+proc horizonAngle*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 0.0, max_dist: float = 100.0): byte =
     ## Calculates horizon angle (maximum upwind slope) for each grid cell in an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#HorizonAngle) for more details.
     ##
@@ -2885,14 +2909,13 @@ proc horizonAngle*(self: var WhiteboxTools, dem: string, output: string, azimuth
     ##
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
-    ## - azimuth: Wind azimuth in degrees.
-    ## - max_dist: Optional maximum search distance (unspecified if none; in xy units).
+    ## - azimuth: Azimuth, in degrees.
+    ## - max_dist: Optional maximum search distance (unspecified if none; in xy units). Minimum value is 5 x cell size.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     args.add(fmt"--azimuth={azimuth}")
-    if max_dist.isSome:
-        args.add(fmt"--max_dist={max_dist}")
+    args.add(fmt"--max_dist={max_dist}")
     result = self.runTool("HorizonAngle", args)
 
 proc hortonStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: string, output: string, esri_pntr: bool = false, zero_background = none(bool)): byte =
@@ -2930,7 +2953,7 @@ proc hypsometricAnalysis*(self: var WhiteboxTools, inputs: string, watershed: st
     args.add(fmt"--output={output}")
     result = self.runTool("HypsometricAnalysis", args)
 
-proc hypsometricallyTintedHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, hs_weight: float = 0.5, brightness: float = 0.5, atmospheric: float = 0.0, palette: string = "atlas", reverse: bool = false, zfactor: float = 1.0, full_mode: bool = false): byte =
+proc hypsometricallyTintedHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, hs_weight: float = 0.5, brightness: float = 0.5, atmospheric: float = 0.0, palette: string = "atlas", reverse: bool = false, zfactor = none(float), full_mode: bool = false): byte =
     ## Creates an colour shaded relief image from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#HypsometricallyTintedHillshade) for more details.
     ##
@@ -2942,7 +2965,7 @@ proc hypsometricallyTintedHillshade*(self: var WhiteboxTools, dem: string, outpu
     ## - hs_weight: Weight given to hillshade relative to relief (0.0-1.0).
     ## - brightness: Brightness factor (0.0-1.0).
     ## - atmospheric: Atmospheric effects weight (0.0-1.0).
-    ## - palette: Options include 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', and 'deep.
+    ## - palette: Options include 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', and 'deep'.
     ## - reverse: Optional flag indicating whether to use reverse the palette.
     ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
     ## - full_mode: Optional flag indicating whether to use full 360-degrees of illumination sources.
@@ -2955,7 +2978,8 @@ proc hypsometricallyTintedHillshade*(self: var WhiteboxTools, dem: string, outpu
     args.add(fmt"--atmospheric={atmospheric}")
     args.add(fmt"--palette={palette}")
     args.add(fmt"--reverse={reverse}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     args.add(fmt"--full_mode={full_mode}")
     result = self.runTool("HypsometricallyTintedHillshade", args)
 
@@ -3258,7 +3282,7 @@ proc isNoData*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("IsNoData", args)
 
-proc isobasins*(self: var WhiteboxTools, dem: string, output: string, size: int): byte =
+proc isobasins*(self: var WhiteboxTools, dem: string, output: string, size: int, connections: bool = false): byte =
     ## Divides a landscape into nearly equal sized drainage basins (i.e. watersheds).
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#Isobasins) for more details.
     ##
@@ -3267,10 +3291,12 @@ proc isobasins*(self: var WhiteboxTools, dem: string, output: string, size: int)
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
     ## - size: Target basin size, in grid cells.
+    ## - connections: Output upstream-downstream flow connections among basins?
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     args.add(fmt"--size={size}")
+    args.add(fmt"--connections={connections}")
     result = self.runTool("Isobasins", args)
 
 proc jensonSnapPourPoints*(self: var WhiteboxTools, pour_pts: string, streams: string, output: string, snap_dist: float): byte =
@@ -3599,6 +3625,32 @@ proc lidarColourize*(self: var WhiteboxTools, in_lidar: string, in_image: string
     args.add(fmt"--output={output}")
     result = self.runTool("LidarColourize", args)
 
+proc lidarDigitalSurfaceModel*(self: var WhiteboxTools, input: string = "", output: string = "", resolution: float = 1.0, radius: float = 0.5, minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
+    ## Creates a top-surface digital surface model (DSM) from a LiDAR point cloud.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarDigitalSurfaceModel) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Input LiDAR file (including extension).
+    ## - output: Output raster file (including extension).
+    ## - resolution: Output raster's grid resolution.
+    ## - radius: Search Radius.
+    ## - minz: Optional minimum elevation for inclusion in interpolation.
+    ## - maxz: Optional maximum elevation for inclusion in interpolation.
+    ## - max_triangle_edge_length: Optional maximum triangle edge length; triangles larger than this size will not be gridded.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--resolution={resolution}")
+    args.add(fmt"--radius={radius}")
+    if minz.isSome:
+        args.add(fmt"--minz={minz}")
+    if maxz.isSome:
+        args.add(fmt"--maxz={maxz}")
+    if max_triangle_edge_length.isSome:
+        args.add(fmt"--max_triangle_edge_length={max_triangle_edge_length}")
+    result = self.runTool("LidarDigitalSurfaceModel", args)
+
 proc lidarElevationSlice*(self: var WhiteboxTools, input: string, output: string, minz = none(float), maxz = none(float), class = none(bool), inclassval: int = 2, outclassval: int = 1): byte =
     ## Outputs all of the points within a LiDAR (LAS) point file that lie between a specified elevation range.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarElevationSlice) for more details.
@@ -3786,7 +3838,7 @@ proc lidarKappaIndex*(self: var WhiteboxTools, input1: string, input2: string, o
     result = self.runTool("LidarKappaIndex", args)
 
 proc lidarNearestNeighbourGridding*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, radius: float = 2.5, exclude_cls: string = "", minz = none(float), maxz = none(float)): byte =
-    ## Grids LAS files using nearest-neighbour scheme. When the input/output parameters are not specified, the tool grids all LAS files contained within the working directory.
+    ## Grids LiDAR files using nearest-neighbour scheme. When the input/output parameters are not specified, the tool grids all LAS files contained within the working directory.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarNearestNeighbourGridding) for more details.
     ##
     ## Keyword arguments:
@@ -3870,7 +3922,7 @@ proc lidarPointStats*(self: var WhiteboxTools, input: string = "", resolution: f
         args.add(fmt"--predom_class={predom_class}")
     result = self.runTool("LidarPointStats", args)
 
-proc lidarRansacPlanes*(self: var WhiteboxTools, input: string, output: string, radius: float = 2.0, num_iter: int = 50, num_samples: int = 5, threshold: float = 0.35, model_size: int = 8, max_slope: float = 80.0, classify: bool = false): byte =
+proc lidarRansacPlanes*(self: var WhiteboxTools, input: string, output: string, radius: float = 2.0, num_iter: int = 50, num_samples: int = 5, threshold: float = 0.35, model_size: int = 8, max_slope: float = 80.0, classify: bool = false, last_returns: bool = false): byte =
     ## Performs a RANSAC analysis to identify points within a LiDAR point cloud that belong to linear planes.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarRansacPlanes) for more details.
     ##
@@ -3885,6 +3937,7 @@ proc lidarRansacPlanes*(self: var WhiteboxTools, input: string, output: string, 
     ## - model_size: Acceptable model size.
     ## - max_slope: Maximum planar slope.
     ## - classify: Classify points as ground (2) or off-ground (1).
+    ## - last_returns: Only include last- and only-return points.
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
@@ -3895,6 +3948,7 @@ proc lidarRansacPlanes*(self: var WhiteboxTools, input: string, output: string, 
     args.add(fmt"--model_size={model_size}")
     args.add(fmt"--max_slope={max_slope}")
     args.add(fmt"--classify={classify}")
+    args.add(fmt"--last_returns={last_returns}")
     result = self.runTool("LidarRansacPlanes", args)
 
 proc lidarRbfInterpolation*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, num_points: int = 20, exclude_cls: string = "", minz = none(float), maxz = none(float), func_type: string = "ThinPlateSpline", poly_order: string = "none", weight: float = 5): byte =
@@ -3981,11 +4035,11 @@ proc lidarRooftopAnalysis*(self: var WhiteboxTools, input: string = "", building
     ## - radius: Search Radius.
     ## - num_iter: Number of iterations.
     ## - num_samples: Number of sample points on which to build the model.
-    ## - threshold: Threshold used to determine inlier points.
-    ## - model_size: Acceptable model size.
-    ## - max_slope: Maximum planar slope.
+    ## - threshold: Threshold used to determine inlier points (in elevation units).
+    ## - model_size: Acceptable model size, in points.
+    ## - max_slope: Maximum planar slope, in degrees.
     ## - norm_diff: Maximum difference in normal vectors, in degrees.
-    ## - azimuth: Illumination source azimuth in degrees.
+    ## - azimuth: Illumination source azimuth, in degrees.
     ## - altitude: Illumination source altitude in degrees.
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
@@ -4057,7 +4111,7 @@ proc lidarSegmentationBasedFilter*(self: var WhiteboxTools, input: string, outpu
         args.add(fmt"--classify={classify}")
     result = self.runTool("LidarSegmentationBasedFilter", args)
 
-proc lidarTINGridding*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, exclude_cls: string = "", minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
+proc lidarTINGridding*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, exclude_cls: string = "7,18", minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
     ## Creates a raster grid based on a Delaunay triangular irregular network (TIN) fitted to LiDAR points.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarTINGridding) for more details.
     ##
@@ -4410,6 +4464,23 @@ proc majorityFilter*(self: var WhiteboxTools, input: string, output: string, fil
     args.add(fmt"--filterx={filterx}")
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("MajorityFilter", args)
+
+proc mapOffTerrainObjects*(self: var WhiteboxTools, dem: string, output: string, max_slope: float = 40.0, min_size: int = 1): byte =
+    ## Maps off-terrain objects in a digital elevation model (DEM).
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MapOffTerrainObjects) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - max_slope: Maximum inter-cell absolute slope.
+    ## - min_size: Minimum feature size, in grid cells.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--max_slope={max_slope}")
+    args.add(fmt"--min_size={min_size}")
+    result = self.runTool("MapOffTerrainObjects", args)
 
 proc max*(self: var WhiteboxTools, input1: string, input2: string, output: string): byte =
     ## Performs a MAX operation on two rasters or a raster and a constant value.
@@ -4965,7 +5036,7 @@ proc multiPartToSinglePart*(self: var WhiteboxTools, input: string, output: stri
     args.add(fmt"--exclude_holes={exclude_holes}")
     result = self.runTool("MultiPartToSinglePart", args)
 
-proc multidirectionalHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, zfactor: float = 1.0, full_mode: bool = false): byte =
+proc multidirectionalHillshade*(self: var WhiteboxTools, dem: string, output: string, altitude: float = 45.0, zfactor = none(float), full_mode: bool = false): byte =
     ## Calculates a multi-direction hillshade raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MultidirectionalHillshade) for more details.
     ##
@@ -4980,7 +5051,8 @@ proc multidirectionalHillshade*(self: var WhiteboxTools, dem: string, output: st
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     args.add(fmt"--altitude={altitude}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     args.add(fmt"--full_mode={full_mode}")
     result = self.runTool("MultidirectionalHillshade", args)
 
@@ -5427,7 +5499,7 @@ proc patchOrientation*(self: var WhiteboxTools, input: string): byte =
     args.add(fmt"--input={input}")
     result = self.runTool("PatchOrientation", args)
 
-proc pennockLandformClass*(self: var WhiteboxTools, dem: string, output: string, slope: float = 3.0, prof: float = 0.1, plan: float = 0.0, zfactor: float = 1.0): byte =
+proc pennockLandformClass*(self: var WhiteboxTools, dem: string, output: string, slope: float = 3.0, prof: float = 0.1, plan: float = 0.0, zfactor = none(float)): byte =
     ## Classifies hillslope zones based on slope, profile curvature, and plan curvature.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#PennockLandformClass) for more details.
     ##
@@ -5445,7 +5517,8 @@ proc pennockLandformClass*(self: var WhiteboxTools, dem: string, output: string,
     args.add(fmt"--slope={slope}")
     args.add(fmt"--prof={prof}")
     args.add(fmt"--plan={plan}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("PennockLandformClass", args)
 
 proc percentElevRange*(self: var WhiteboxTools, dem: string, output: string, filterx: int = 3, filtery: int = 3): byte =
@@ -5574,7 +5647,7 @@ proc pickFromList*(self: var WhiteboxTools, inputs: string, pos_input: string, o
     args.add(fmt"--output={output}")
     result = self.runTool("PickFromList", args)
 
-proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates a plan (contour) curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#PlanCurvature) for more details.
     ##
@@ -5586,7 +5659,8 @@ proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, zfacto
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("PlanCurvature", args)
 
 proc polygonArea*(self: var WhiteboxTools, input: string): byte =
@@ -5738,7 +5812,7 @@ proc profile*(self: var WhiteboxTools, lines: string, surface: string, output: s
     args.add(fmt"--output={output}")
     result = self.runTool("Profile", args)
 
-proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates a profile curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ProfileCurvature) for more details.
     ##
@@ -5750,7 +5824,8 @@ proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, zfa
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("ProfileCurvature", args)
 
 proc quantiles*(self: var WhiteboxTools, input: string, output: string, num_quantiles: int = 5): byte =
@@ -6122,7 +6197,7 @@ proc relatedCircumscribingCircle*(self: var WhiteboxTools, input: string): byte 
     args.add(fmt"--input={input}")
     result = self.runTool("RelatedCircumscribingCircle", args)
 
-proc relativeAspect*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 0.0, zfactor: float = 1.0): byte =
+proc relativeAspect*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = 0.0, zfactor = none(float)): byte =
     ## Calculates relative aspect (relative to a user-specified direction) from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#RelativeAspect) for more details.
     ##
@@ -6136,7 +6211,8 @@ proc relativeAspect*(self: var WhiteboxTools, dem: string, output: string, azimu
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     args.add(fmt"--azimuth={azimuth}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("RelativeAspect", args)
 
 proc relativeTopographicPosition*(self: var WhiteboxTools, dem: string, output: string, filterx: int = 11, filtery: int = 11): byte =
@@ -6220,18 +6296,23 @@ proc removeSpurs*(self: var WhiteboxTools, input: string, output: string, iterat
     args.add(fmt"--iterations={iterations}")
     result = self.runTool("RemoveSpurs", args)
 
-proc resample*(self: var WhiteboxTools, inputs: string, destination: string, method_val: string = "cc"): byte =
+proc resample*(self: var WhiteboxTools, inputs: string, output: string, cell_size = none(float), base: string = "", method_val: string = "cc"): byte =
     ## Resamples one or more input images into a destination image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools.html#Resample) for more details.
     ##
     ## Keyword arguments:
     ##
     ## - inputs: Input raster files.
-    ## - destination: Destination raster file.
+    ## - output: Output raster file.
+    ## - cell_size: Optionally specified cell size of output raster. Not used when base raster is specified.
+    ## - base: Optionally specified input base raster file. Not used when a cell size is specified.
     ## - method_val: Resampling method; options include 'nn' (nearest neighbour), 'bilinear', and 'cc' (cubic convolution)
     var args = newSeq[string]()
     args.add(fmt"--inputs={inputs}")
-    args.add(fmt"--destination={destination}")
+    args.add(fmt"--output={output}")
+    if cell_size.isSome:
+        args.add(fmt"--cell_size={cell_size}")
+    args.add(fmt"--base={base}")
     args.add(fmt"--method_val={method_val}")
     result = self.runTool("Resample", args)
 
@@ -6337,7 +6418,7 @@ proc round*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("Round", args)
 
-proc ruggednessIndex*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc ruggednessIndex*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates the Riley et al.'s (1999) terrain ruggedness index from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#RuggednessIndex) for more details.
     ##
@@ -6349,7 +6430,8 @@ proc ruggednessIndex*(self: var WhiteboxTools, dem: string, output: string, zfac
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("RuggednessIndex", args)
 
 proc scharrFilter*(self: var WhiteboxTools, input: string, output: string, clip: float = 0.0): byte =
@@ -6536,7 +6618,7 @@ proc sink*(self: var WhiteboxTools, input: string, output: string, zero_backgrou
         args.add(fmt"--zero_background={zero_background}")
     result = self.runTool("Sink", args)
 
-proc slope*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0, units: string = "degrees"): byte =
+proc slope*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float), units: string = "degrees"): byte =
     ## Calculates a slope raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Slope) for more details.
     ##
@@ -6549,7 +6631,8 @@ proc slope*(self: var WhiteboxTools, dem: string, output: string, zfactor: float
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     args.add(fmt"--units={units}")
     result = self.runTool("Slope", args)
 
@@ -6724,7 +6807,7 @@ proc standardDeviationFilter*(self: var WhiteboxTools, input: string, output: st
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("StandardDeviationFilter", args)
 
-proc standardDeviationOfSlope*(self: var WhiteboxTools, input: string, output: string, zfactor: float = 1.0, filterx: int = 11, filtery: int = 11): byte =
+proc standardDeviationOfSlope*(self: var WhiteboxTools, input: string, output: string, zfactor = none(float), filterx: int = 11, filtery: int = 11): byte =
     ## Calculates the standard deviation of slope from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#StandardDeviationOfSlope) for more details.
     ##
@@ -6738,7 +6821,8 @@ proc standardDeviationOfSlope*(self: var WhiteboxTools, input: string, output: s
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     args.add(fmt"--filterx={filterx}")
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("StandardDeviationOfSlope", args)
@@ -7033,7 +7117,7 @@ proc tan*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("Tan", args)
 
-proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates a tangential curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TangentialCurvature) for more details.
     ##
@@ -7045,7 +7129,8 @@ proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, 
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("TangentialCurvature", args)
 
 proc tanh*(self: var WhiteboxTools, input: string, output: string): byte =
@@ -7073,6 +7158,37 @@ proc thickenRasterLine*(self: var WhiteboxTools, input: string, output: string):
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
     result = self.runTool("ThickenRasterLine", args)
+
+proc timeInDaylight*(self: var WhiteboxTools, dem: string, output: string, az_fraction: float = 10.0, max_dist: float = 100.0, lat: float, long: float, utc_offset: string = "00:00", start_day: int = 1, end_day: int = 365, start_time: string = "00:00:00", end_time: string = "23:59:59"): byte =
+    ## Calculates the proportion of time a location is not within an area of shadow.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TimeInDaylight) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - az_fraction: Azimuth fraction in degrees.
+    ## - max_dist: Optional maximum search distance. Minimum value is 5 x cell size.
+    ## - lat: Centre point latitude.
+    ## - long: Centre point longitude.
+    ## - utc_offset: UTC time offset, in hours (e.g. -04:00, +06:00).
+    ## - start_day: Start day of the year (1-365).
+    ## - end_day: End day of the year (1-365).
+    ## - start_time: Starting hour to track shadows (e.g. 5, 5:00, 05:00:00). Assumes 24-hour time: HH:MM:SS. 'sunrise' is also a valid time.
+    ## - end_time: Starting hour to track shadows (e.g. 21, 21:00, 21:00:00). Assumes 24-hour time: HH:MM:SS. 'sunset' is also a valid time.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--az_fraction={az_fraction}")
+    args.add(fmt"--max_dist={max_dist}")
+    args.add(fmt"--lat={lat}")
+    args.add(fmt"--long={long}")
+    args.add(fmt"--utc_offset={utc_offset}")
+    args.add(fmt"--start_day={start_day}")
+    args.add(fmt"--end_day={end_day}")
+    args.add(fmt"--start_time={start_time}")
+    args.add(fmt"--end_time={end_time}")
+    result = self.runTool("TimeInDaylight", args)
 
 proc toDegrees*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Converts a raster from radians to degrees.
@@ -7139,7 +7255,7 @@ proc topologicalStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: 
         args.add(fmt"--zero_background={zero_background}")
     result = self.runTool("TopologicalStreamOrder", args)
 
-proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
     ## Calculates a total curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TotalCurvature) for more details.
     ##
@@ -7151,7 +7267,8 @@ proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, zfact
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
-    args.add(fmt"--zfactor={zfactor}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("TotalCurvature", args)
 
 proc totalFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 11, filtery: int = 11): byte =
@@ -7690,7 +7807,7 @@ proc zonalStatistics*(self: var WhiteboxTools, input: string, features: string, 
     args.add(fmt"--stat={stat}")
     args.add(fmt"--out_table={out_table}")
     result = self.runTool("ZonalStatistics", args)
-
+    
 proc generateFunctions() =
     var 
         wbt = newWhiteboxTools()
