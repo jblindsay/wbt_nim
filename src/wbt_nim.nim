@@ -80,6 +80,7 @@ proc defaultCallback(line: string) =
 
 type WhiteboxTools = object of RootObj
     exePath: string
+    exeName: string
     workingDirectory: string
     verbose: bool
     compressRasters: bool
@@ -92,9 +93,13 @@ proc newWhiteboxTools*(): WhiteboxTools =
     ## to the current directory. The WhiteboxTools executable is
     ## assumed to be within the same directory as this application.
     var exePath = os.getAppDir()
+    var exeName = "whitebox_tools"
+    if not os.ExeExt.isEmptyOrWhitespace():
+        exeName = "whitebox_tools.exe"
     let workingDirectory = os.getCurrentDir()
     result = WhiteboxTools(
         exePath: exePath, 
+        exeName: exeName,
         workingDirectory: workingDirectory, 
         verbose: true, 
         compressRasters: true,
@@ -168,39 +173,39 @@ proc getCancelOp*(self: WhiteboxTools): bool =
 
 proc getLicense*(self: WhiteboxTools): string = 
     ## Retrieves the license information for WhiteboxTools.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=["--license"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=["--license"], options={poUsePath})
     
 proc getVersionInfo*(self: WhiteboxTools): string =
     ## Retrieves the version information for WhiteboxTools.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=["--version"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=["--version"], options={poUsePath})
 
 proc help*(self: WhiteboxTools): string =
     ## Retrieves the help description for WhiteboxTools.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=["-h"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=["-h"], options={poUsePath})
 
 proc listTools*(self: WhiteboxTools): string =
     ## Returns a listing of each available tool and a brief tool 
     ## description for each entry.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=["--listtools"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=["--listtools"], options={poUsePath})
 
 proc getToolHelp*(self: WhiteboxTools, toolName: string): string =
     ## Retrieves the help description for a specific tool.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=[fmt"--toolhelp={toolName}"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=[fmt"--toolhelp={toolName}"], options={poUsePath})
 
 proc getToolParameters*(self: WhiteboxTools, toolName: string): string =
     ## Retrieves the tool parameter descriptions for a specific tool.
-    result = execProcess(fmt"{self.exePath}whitebox_tools", args=[fmt"--toolparameters={toolName}"], options={poUsePath})
+    result = execProcess(fmt"{self.exePath}{self.exeName}", args=[fmt"--toolparameters={toolName}"], options={poUsePath})
 
 proc getToolbox*(self: WhiteboxTools, toolName: string): string =
     ## Retrieves the tool parameter descriptions for a specific tool.
-    let tb = execProcess(fmt"{self.exePath}whitebox_tools", args=[fmt"--toolbox={toolName}"], options={poUsePath})
+    let tb = execProcess(fmt"{self.exePath}{self.exeName}", args=[fmt"--toolbox={toolName}"], options={poUsePath})
     result = tb.strip()
 
 proc viewCode*(self: WhiteboxTools, toolName: string): string =
     ## Returns and navigates to the URL of the source code for a specific tool
     ## on the projects source code repository. 
     let tn = fmt"{toolName[0].toUpperAscii()}{toolName[1..<len(toolName)]}"
-    let cp = execProcess(fmt"{self.exePath}whitebox_tools", args=[fmt"--viewcode={tn}"], options={poUsePath})
+    let cp = execProcess(fmt"{self.exePath}{self.exeName}", args=[fmt"--viewcode={tn}"], options={poUsePath})
     result = cp.strip()
     openDefaultBrowser(result)
 
@@ -223,7 +228,7 @@ proc runTool(self: var WhiteboxTools, toolName: string, toolArgs: seq[string]): 
     Returns 2 if process is cancelled by user.
     ]#
     try:
-        let cmd = self.exePath & "whitebox_tools"
+        let cmd = self.exePath & self.exeName
 
         var args = newSeq[string]()
         args.add(fmt"--wd={self.workingDirectory}")
@@ -244,7 +249,7 @@ proc runTool(self: var WhiteboxTools, toolName: string, toolArgs: seq[string]): 
                     args.add(a)
 
         if self.verbose:
-            echo(fmt"./whitebox_tools {args}")
+            echo(fmt"./{self.exeName} {args}")
 
         # let outp = execProcess(fmt"{exePath}whitebox_tools", args=args, options={poUsePath})
         # echo outp
@@ -286,6 +291,23 @@ proc absoluteValue*(self: var WhiteboxTools, input: string, output: string): byt
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
     result = self.runTool("AbsoluteValue", args)
+
+proc accumulationCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates accumulation curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#AccumulationCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("AccumulationCurvature", args)
 
 proc adaptiveFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 11, filtery: int = 11, threshold: float = 2.0): byte =
     ## Performs an adaptive filter on an image.
@@ -487,6 +509,25 @@ proc aspect*(self: var WhiteboxTools, dem: string, output: string, zfactor = non
     if zfactor.isSome:
         args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("Aspect", args)
+
+proc assessRoute*(self: var WhiteboxTools, routes: string, dem: string, output: string, length: float = , dist: int = 20): byte =
+    ## This tool assesses a route for slope, elevation, and visibility variation.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#AssessRoute) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - routes: Name of the input routes vector file.
+    ## - dem: Name of the input DEM raster file.
+    ## - output: Name of the output lines shapefile.
+    ## - length: Maximum segment length (m).
+    ## - dist: Search distance, in grid cells, used in visibility analysis.
+    var args = newSeq[string]()
+    args.add(fmt"--routes={routes}")
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--length={length}")
+    args.add(fmt"--dist={dist}")
+    result = self.runTool("AssessRoute", args)
 
 proc atan2*(self: var WhiteboxTools, input_y: string, input_x: string, output: string): byte =
     ## Returns the 2-argument inverse tangent (atan2).
@@ -831,6 +872,27 @@ proc burnStreamsAtRoads*(self: var WhiteboxTools, dem: string, streams: string, 
         args.add(fmt"--width={width}")
     result = self.runTool("BurnStreamsAtRoads", args)
 
+proc cannyEdgeDetection*(self: var WhiteboxTools, input: string, output: string, sigma: float = 0.5, low: float = 0.05, high: float = 0.15, add_back: bool = false): byte =
+    ## This tool performs a Canny edge-detection filter on an input image.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_filters.html#CannyEdgeDetection) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster image file.
+    ## - output: Name of the output raster image file.
+    ## - sigma: Sigma value used in Gaussian filtering, default = 0.5
+    ## - low: Low threshold, default = 0.05
+    ## - high: High threshold, default = 0.15
+    ## - add_back: Add the edge cells back to the input image
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--sigma={sigma}")
+    args.add(fmt"--low={low}")
+    args.add(fmt"--high={high}")
+    args.add(fmt"--add_back={add_back}")
+    result = self.runTool("CannyEdgeDetection", args)
+
 proc ceil*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Returns the smallest (closest to negative infinity) value that is greater than or equal to the values in a raster.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#Ceil) for more details.
@@ -860,7 +922,7 @@ proc centroid*(self: var WhiteboxTools, input: string, output: string, text_outp
     result = self.runTool("Centroid", args)
 
 proc centroidVector*(self: var WhiteboxTools, input: string, output: string): byte =
-    ## Identifes the centroid point of a vector polyline or polygon feature or a group of vector points.
+    ## Identifies the centroid point of a vector polyline or polygon feature or a group of vector points.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis.html#CentroidVector) for more details.
     ##
     ## Keyword arguments:
@@ -1040,6 +1102,25 @@ proc compactnessRatio*(self: var WhiteboxTools, input: string): byte =
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     result = self.runTool("CompactnessRatio", args)
+
+proc conditionalEvaluation*(self: var WhiteboxTools, input: string, statement: string = "", true: string = "", false: string = "", output: string): byte =
+    ## This tool performs a conditional evaluation (if-then-else) operation on a raster.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#ConditionalEvaluation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster file.
+    ## - statement: Conditional statement e.g. value > 35.0. This statement must be a valid Rust statement.
+    ## - true: Value where condition evaluates TRUE (input raster or constant value).
+    ## - false: Value where condition evaluates FALSE (input raster or constant value).
+    ## - output: Name of the output raster file.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--statement={statement}")
+    args.add(fmt"--true={true}")
+    args.add(fmt"--false={false}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("ConditionalEvaluation", args)
 
 proc conservativeSmoothingFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 3, filtery: int = 3): byte =
     ## Performs a conservative-smoothing filter on an image.
@@ -1416,6 +1497,23 @@ proc cumulativeDistribution*(self: var WhiteboxTools, input: string, output: str
     args.add(fmt"--output={output}")
     result = self.runTool("CumulativeDistribution", args)
 
+proc curvedness*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates curvedness from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Curvedness) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("Curvedness", args)
+
 proc d8FlowAccumulation*(self: var WhiteboxTools, input: string, output: string, out_type: string = "cells", log = none(bool), clip = none(bool), pntr = none(bool), esri_pntr: bool = false): byte =
     ## Calculates a D8 flow accumulation raster from an input DEM or flow pointer.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#D8FlowAccumulation) for more details.
@@ -1428,7 +1526,7 @@ proc d8FlowAccumulation*(self: var WhiteboxTools, input: string, output: string,
     ## - log: Optional flag to request the output be log-transformed.
     ## - clip: Optional flag to request clipping the display max by 1%.
     ## - pntr: Is the input raster a D8 flow pointer rather than a DEM?
-    ## - esri_pntr: Input  D8 pointer uses the ESRI style scheme.
+    ## - esri_pntr: Input D8 pointer uses the ESRI style scheme.
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
@@ -1485,7 +1583,7 @@ proc dInfFlowAccumulation*(self: var WhiteboxTools, input: string, output: strin
     ## - input: Input raster DEM or D-infinity pointer file.
     ## - output: Output raster file.
     ## - out_type: Output type; one of 'cells', 'sca' (default), and 'ca'.
-    ## - threshold: Optional convergence threshold parameter, in grid cells; default is inifinity.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
     ## - log: Optional flag to request the output be log-transformed.
     ## - clip: Optional flag to request clipping the display max by 1%.
     ## - pntr: Is the input raster a D-infinity flow pointer rather than a DEM?
@@ -1534,6 +1632,25 @@ proc dInfPointer*(self: var WhiteboxTools, dem: string, output: string): byte =
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     result = self.runTool("DInfPointer", args)
+
+proc dbscan*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", output: string, search_dist: float = 0.01, min_points: int = 5): byte =
+    ## Performs a DBSCAN-based unsupervised clustering operation.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#Dbscan) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - output: Name of the output raster file.
+    ## - search_dist: Search-distance parameter.
+    ## - min_points: Minimum point density needed to define 'core' point in cluster.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--search_dist={search_dist}")
+    args.add(fmt"--min_points={min_points}")
+    result = self.runTool("Dbscan", args)
 
 proc decrement*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Decreases the values of each grid cell in an input raster by 1.0 (see also InPlaceSubtract).
@@ -1629,6 +1746,23 @@ proc difference*(self: var WhiteboxTools, input: string, overlay: string, output
     args.add(fmt"--overlay={overlay}")
     args.add(fmt"--output={output}")
     result = self.runTool("Difference", args)
+
+proc differenceCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates difference curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#DifferenceCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("DifferenceCurvature", args)
 
 proc directDecorrelationStretch*(self: var WhiteboxTools, input: string, output: string, k: float = 0.5, clip: float = 1.0): byte =
     ## Performs a direct decorrelation stretch enhancement on a colour-composite image of multispectral data.
@@ -1734,7 +1868,7 @@ proc divide*(self: var WhiteboxTools, input1: string, input2: string, output: st
     args.add(fmt"--output={output}")
     result = self.runTool("Divide", args)
 
-proc downslopeDistanceToStream*(self: var WhiteboxTools, dem: string, streams: string, output: string): byte =
+proc downslopeDistanceToStream*(self: var WhiteboxTools, dem: string, streams: string, output: string, dinf: bool = false): byte =
     ## Measures distance to the nearest downslope stream cell.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#DownslopeDistanceToStream) for more details.
     ##
@@ -1743,10 +1877,12 @@ proc downslopeDistanceToStream*(self: var WhiteboxTools, dem: string, streams: s
     ## - dem: Input raster DEM file.
     ## - streams: Input raster streams file.
     ## - output: Output raster file.
+    ## - dinf: Use the D-infinity flow algorithm instead of D8?
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--streams={streams}")
     args.add(fmt"--output={output}")
+    args.add(fmt"--dinf={dinf}")
     result = self.runTool("DownslopeDistanceToStream", args)
 
 proc downslopeFlowpathLength*(self: var WhiteboxTools, d8_pntr: string, watersheds: string = "", weights: string = "", output: string, esri_pntr: bool = false): byte =
@@ -1784,6 +1920,23 @@ proc downslopeIndex*(self: var WhiteboxTools, dem: string, output: string, drop:
     args.add(fmt"--drop={drop}")
     args.add(fmt"--out_type={out_type}")
     result = self.runTool("DownslopeIndex", args)
+
+proc edgeContamination*(self: var WhiteboxTools, dem: string, output: string, flow_type: string = "mfd", zfactor: float = ): byte =
+    ## This tool identifies grid cells within an input DEM that may be impacted by edge contamination for hydrological applications.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#EdgeContamination) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file; must be depressionless.
+    ## - output: Name of the output raster file.
+    ## - flow_type: Flow algorithm type, one of 'd8', 'mfd', or 'dinf'
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--flow_type={flow_type}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("EdgeContamination", args)
 
 proc edgeDensity*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, norm_diff: float = 5.0, zfactor = none(float)): byte =
     ## Calculates the density of edges, or breaks-in-slope within DEMs.
@@ -1954,6 +2107,37 @@ proc elongationRatio*(self: var WhiteboxTools, input: string): byte =
     args.add(fmt"--input={input}")
     result = self.runTool("ElongationRatio", args)
 
+proc embankmentMapping*(self: var WhiteboxTools, dem: string, road_vec: string, output: string, search_dist: float = 2.5, min_road_width: float = 6.0, typical_width: float = 30.0, max_height: float = 2.0, max_width: float = 60.0, max_increment: float = 0.05, spillout_slope: float = 4.0, remove_embankments: bool = false): byte =
+    ## Maps and/or removes road embankments from an input fine-resolution DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#EmbankmentMapping) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - road_vec: Input vector polygons file.
+    ## - output: Output raster file.
+    ## - search_dist: Search distance used to reposition transportation vectors onto road embankments (in map units).
+    ## - min_road_width: Minimum road width; this is the width of the paved road surface (in map units).
+    ## - typical_width: Typical embankment width; this is the maximum width of an embankment with roadside ditches (in map units).
+    ## - max_height: Typical embankment maximum height; this is the height a typical embankment with roadside ditches (in map units).
+    ## - max_width: Maximum embankment width, typically where embankments traverse steep-sided valleys (in map units).
+    ## - max_increment: Maximum upwards increment between neighbouring cells on an embankment (in elevation units).
+    ## - spillout_slope: Spillout slope (in degrees).
+    ## - remove_embankments: Optional flag indicating whether to output a DEM with embankments removed (true) or an embankment raster map (false).
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--road_vec={road_vec}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--search_dist={search_dist}")
+    args.add(fmt"--min_road_width={min_road_width}")
+    args.add(fmt"--typical_width={typical_width}")
+    args.add(fmt"--max_height={max_height}")
+    args.add(fmt"--max_width={max_width}")
+    args.add(fmt"--max_increment={max_increment}")
+    args.add(fmt"--spillout_slope={spillout_slope}")
+    args.add(fmt"--remove_embankments={remove_embankments}")
+    result = self.runTool("EmbankmentMapping", args)
+
 proc embossFilter*(self: var WhiteboxTools, input: string, output: string, direction: string = "n", clip: float = 0.0): byte =
     ## Performs an emboss filter on an image, similar to a hillshade operation.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_filters.html#EmbossFilter) for more details.
@@ -2057,6 +2241,23 @@ proc euclideanDistance*(self: var WhiteboxTools, input: string, output: string):
     args.add(fmt"--output={output}")
     result = self.runTool("EuclideanDistance", args)
 
+proc evaluateTrainingSites*(self: var WhiteboxTools, inputs: string, polys: string, field: string, output: string): byte =
+    ## This tool can be used to inspect the overlap in spectral signatures of training sites for various classes.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#EvaluateTrainingSites) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Name of the input band images.
+    ## - polys: Name of the input training site polygons shapefile.
+    ## - field: Name of the attribute containing class name data.
+    ## - output: Name of the output report file (*.html).
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--polys={polys}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("EvaluateTrainingSites", args)
+
 proc exp*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Returns the exponential (base e) of values in a raster.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#Exp) for more details.
@@ -2090,13 +2291,32 @@ proc exportTableToCsv*(self: var WhiteboxTools, input: string, output: string, h
     ## Keyword arguments:
     ##
     ## - input: Input vector file.
-    ## - output: Output raster file.
+    ## - output: Output csv file.
     ## - headers: Export field names as file header?
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
     args.add(fmt"--headers={headers}")
     result = self.runTool("ExportTableToCsv", args)
+
+proc exposureTowardsWindFlux*(self: var WhiteboxTools, dem: string, output: string, azimuth: float = , max_dist: int = , zfactor: float = ): byte =
+    ## This tool evaluates hydrologic connectivity within a DEM
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ExposureTowardsWindFlux) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file.
+    ## - output: Name of the output raster file.
+    ## - azimuth: Wind azimuth, in degrees.
+    ## - max_dist: Optional maximum search distance. Minimum value is 5 x cell size.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--azimuth={azimuth}")
+    args.add(fmt"--max_dist={max_dist}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("ExposureTowardsWindFlux", args)
 
 proc extendVectorLines*(self: var WhiteboxTools, input: string, output: string, dist: float, extend: string = "both ends"): byte =
     ## Extends vector lines by a specified distance.
@@ -2190,7 +2410,7 @@ proc fD8FlowAccumulation*(self: var WhiteboxTools, dem: string, output: string, 
     ## - output: Output raster file.
     ## - out_type: Output type; one of 'cells', 'specific contributing area' (default), and 'catchment area'.
     ## - exponent: Optional exponent parameter; default is 1.1.
-    ## - threshold: Optional convergence threshold parameter, in grid cells; default is inifinity.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
     ## - log: Optional flag to request the output be log-transformed.
     ## - clip: Optional flag to request clipping the display max by 1%.
     var args = newSeq[string]()
@@ -2550,6 +2770,21 @@ proc findRidges*(self: var WhiteboxTools, dem: string, output: string, line_thin
     args.add(fmt"--line_thin={line_thin}")
     result = self.runTool("FindRidges", args)
 
+proc fixDanglingArcs*(self: var WhiteboxTools, input: string, output: string, dist: float = ): byte =
+    ## This tool fixes undershot and overshot arcs, two common topological errors, in an input vector lines file.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/data_tools.html#FixDanglingArcs) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input lines vector file.
+    ## - output: Name of the output lines vector file.
+    ## - dist: Snap distance, in xy units (metres).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--dist={dist}")
+    result = self.runTool("FixDanglingArcs", args)
+
 proc flattenLakes*(self: var WhiteboxTools, dem: string, lakes: string, output: string): byte =
     ## Flattens lake polygons in a raster DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#FlattenLakes) for more details.
@@ -2693,6 +2928,24 @@ proc gaussianContrastStretch*(self: var WhiteboxTools, input: string, output: st
     args.add(fmt"--num_tones={num_tones}")
     result = self.runTool("GaussianContrastStretch", args)
 
+proc gaussianCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
+    ## Calculates a mean curvature raster from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#GaussianCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("GaussianCurvature", args)
+
 proc gaussianFilter*(self: var WhiteboxTools, input: string, output: string, sigma: float = 0.75): byte =
     ## Performs a Gaussian filter on an image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_filters.html#GaussianFilter) for more details.
@@ -2707,6 +2960,108 @@ proc gaussianFilter*(self: var WhiteboxTools, input: string, output: string, sig
     args.add(fmt"--output={output}")
     args.add(fmt"--sigma={sigma}")
     result = self.runTool("GaussianFilter", args)
+
+proc gaussianScaleSpace*(self: var WhiteboxTools, dem: string, points: string = "", output: string, output_zscore: string, output_scale: string, sigma: float = 0.5, step: float = 0.5, num_steps: int = 10, lsp: string = "Slope", z_factor = none(float)): byte =
+    ## This tool uses the fast Gaussian approximation algorithm to produce scaled land-surface parameter measurements from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#GaussianScaleSpace) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file.
+    ## - points: Name of the input vector points shapefile.
+    ## - output: Name of the output land-surface parameter raster file.
+    ## - output_zscore: Name of the output z-score raster file.
+    ## - output_scale: Name of the output scale raster file.
+    ## - sigma: Initial sigma value (cells).
+    ## - step: Step size as any positive non-zero integer.
+    ## - num_steps: Number of steps.
+    ## - lsp: Output land-surface parameter; one of 'AnisotropyLTP', 'Aspect', 'DiffMeanElev', 'Eastness', 'Elevation', 'Hillshade', 'MeanCurvature', 'Northness', 'PlanCurvature', 'ProfileCurvature', 'Ruggedness', 'Slope', 'TanCurvature', 'TotalCurvature'.
+    ## - z_factor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--points={points}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--output_zscore={output_zscore}")
+    args.add(fmt"--output_scale={output_scale}")
+    args.add(fmt"--sigma={sigma}")
+    args.add(fmt"--step={step}")
+    args.add(fmt"--num_steps={num_steps}")
+    args.add(fmt"--lsp={lsp}")
+    if z_factor.isSome:
+        args.add(fmt"--z_factor={z_factor}")
+    result = self.runTool("GaussianScaleSpace", args)
+
+proc generalizeClassifiedRaster*(self: var WhiteboxTools, input: string, output: string, min_size: int = 4, method_val: string = "longest"): byte =
+    ## Generalizes a raster containing class or object features by removing small features.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#GeneralizeClassifiedRaster) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster image file.
+    ## - output: Name of the output raster file.
+    ## - min_size: Minimum feature size, in grid cells.
+    ## - method_val: Grouping method; one of 'longest' (default), 'largest', and 'nearest'.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--min_size={min_size}")
+    args.add(fmt"--method_val={method_val}")
+    result = self.runTool("GeneralizeClassifiedRaster", args)
+
+proc generalizeWithSimilarity*(self: var WhiteboxTools, input: string, similarity: string, output: string, min_size: int = 4): byte =
+    ## Generalizes a raster containing class or object features by removing small features using similarity criteria of neighbouring features.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#GeneralizeWithSimilarity) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster image file.
+    ## - similarity: Names of the input similarity images.
+    ## - output: Name of the output raster file.
+    ## - min_size: Minimum feature size, in grid cells.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--similarity={similarity}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--min_size={min_size}")
+    result = self.runTool("GeneralizeWithSimilarity", args)
+
+proc generatingFunction*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates generating function from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#GeneratingFunction) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("GeneratingFunction", args)
+
+proc geomorphons*(self: var WhiteboxTools, dem: string, output: string, search: int = 50, threshold: float = 0.0, tdist: int = 0, forms: bool = true): byte =
+    ## Computes geomorphon patterns.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Geomorphons) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - search: Look up distance.
+    ## - threshold: Flatness threshold for the classification function (in degrees).
+    ## - tdist: Distance (in cells) to begin reducing the flatness threshold to avoid problems with pseudo-flat lines-of-sight.
+    ## - forms: Classify geomorphons into 10 common land morphologies, else, output ternary code.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--search={search}")
+    args.add(fmt"--threshold={threshold}")
+    args.add(fmt"--tdist={tdist}")
+    args.add(fmt"--forms={forms}")
+    result = self.runTool("Geomorphons", args)
 
 proc greaterThan*(self: var WhiteboxTools, input1: string, input2: string, output: string, incl_equals = none(bool)): byte =
     ## Performs a greater-than comparison operation on two rasters or a raster and a constant value.
@@ -2846,7 +3201,7 @@ proc hillslopes*(self: var WhiteboxTools, d8_pntr: string, streams: string, outp
     result = self.runTool("Hillslopes", args)
 
 proc histogramEqualization*(self: var WhiteboxTools, input: string, output: string, num_tones: int = 256): byte =
-    ## Performs a histogram equalization contrast enhancment on an image.
+    ## Performs a histogram equalization contrast enhancement on an image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_image_enhancement.html#HistogramEqualization) for more details.
     ##
     ## Keyword arguments:
@@ -2918,6 +3273,23 @@ proc horizonAngle*(self: var WhiteboxTools, dem: string, output: string, azimuth
     args.add(fmt"--max_dist={max_dist}")
     result = self.runTool("HorizonAngle", args)
 
+proc horizontalExcessCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates horizontal excess curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#HorizontalExcessCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("HorizontalExcessCurvature", args)
+
 proc hortonStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: string, output: string, esri_pntr: bool = false, zero_background = none(bool)): byte =
     ## Assigns the Horton stream order to each tributary in a stream network.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/stream_network_analysis.html#HortonStreamOrder) for more details.
@@ -2937,6 +3309,26 @@ proc hortonStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: strin
     if zero_background.isSome:
         args.add(fmt"--zero_background={zero_background}")
     result = self.runTool("HortonStreamOrder", args)
+
+proc hydrologicConnectivity*(self: var WhiteboxTools, dem: string, output1: string, output2: string, exponent: float = 1.0, threshold = none(float)): byte =
+    ## This tool evaluates hydrologic connectivity within a DEM
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#HydrologicConnectivity) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file; must be depressionless.
+    ## - output1: Name of the output downslope unsaturated length (DUL) file.
+    ## - output2: Name of the output upslope disconnected saturated area (UDSA) file.
+    ## - exponent: Optional exponent parameter; default is 1.0.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output1={output1}")
+    args.add(fmt"--output2={output2}")
+    args.add(fmt"--exponent={exponent}")
+    if threshold.isSome:
+        args.add(fmt"--threshold={threshold}")
+    result = self.runTool("HydrologicConnectivity", args)
 
 proc hypsometricAnalysis*(self: var WhiteboxTools, inputs: string, watershed: string = "", output: string): byte =
     ## Calculates a hypsometric curve for one or more DEMs.
@@ -3094,7 +3486,7 @@ proc imageRegression*(self: var WhiteboxTools, input1: string, input2: string, o
     ## - input1: Input raster file (independent variable, X).
     ## - input2: Input raster file (dependent variable, Y).
     ## - output: Output HTML file for regression summary report.
-    ## - out_residuals: Output raster regression resdidual file.
+    ## - out_residuals: Output raster regression residual file.
     ## - standardize: Optional flag indicating whether to standardize the residuals map.
     ## - scattergram: Optional flag indicating whether to output a scattergram.
     ## - num_samples: Number of samples used to create scattergram
@@ -3109,6 +3501,54 @@ proc imageRegression*(self: var WhiteboxTools, input1: string, input2: string, o
         args.add(fmt"--scattergram={scattergram}")
     args.add(fmt"--num_samples={num_samples}")
     result = self.runTool("ImageRegression", args)
+
+proc imageSegmentation*(self: var WhiteboxTools, inputs: string, output: string, threshold: float = 0.5, steps: int = 10, min_area: int = 4): byte =
+    ## Performs a region-growing based segmentation on a set of multi-spectral images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#ImageSegmentation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input band images.
+    ## - output: Name of the output raster file.
+    ## - threshold: Distance threshold, in z-scores.
+    ## - steps: Number of steps.
+    ## - min_area: Minimum object area, in grid cells (1-8).
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--threshold={threshold}")
+    args.add(fmt"--steps={steps}")
+    args.add(fmt"--min_area={min_area}")
+    result = self.runTool("ImageSegmentation", args)
+
+proc imageSlider*(self: var WhiteboxTools, input1: string, palette1: string = "grey", reverse1: bool = false, label1: string = "", input2: string, palette2: string = "grey", reverse2: bool = false, label2: string = "", output: string, height: int = 600): byte =
+    ## This tool creates an image slider from two input images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools.html#ImageSlider) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input1: Name of the left input image file.
+    ## - palette1: Left image palette; options are 'grey', 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', 'deep', and 'rgb'.
+    ## - reverse1: Reverse left image palette?
+    ## - label1: Left image label (leave blank for none)
+    ## - input2: Name of the right input image file.
+    ## - palette2: Right image palette; options are 'grey', 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', 'deep', and 'rgb'.
+    ## - reverse2: Reverse right image palette?
+    ## - label2: Right image label (leave blank for none)
+    ## - output: Name of the output HTML file (*.html).
+    ## - height: Image height, in pixels.
+    var args = newSeq[string]()
+    args.add(fmt"--input1={input1}")
+    args.add(fmt"--palette1={palette1}")
+    args.add(fmt"--reverse1={reverse1}")
+    args.add(fmt"--label1={label1}")
+    args.add(fmt"--input2={input2}")
+    args.add(fmt"--palette2={palette2}")
+    args.add(fmt"--reverse2={reverse2}")
+    args.add(fmt"--label2={label2}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--height={height}")
+    result = self.runTool("ImageSlider", args)
 
 proc imageStackProfile*(self: var WhiteboxTools, inputs: string, points: string, output: string): byte =
     ## Plots an image stack profile (i.e. signature) for a set of points and multispectral images.
@@ -3125,20 +3565,26 @@ proc imageStackProfile*(self: var WhiteboxTools, inputs: string, points: string,
     args.add(fmt"--output={output}")
     result = self.runTool("ImageStackProfile", args)
 
-proc impoundmentSizeIndex*(self: var WhiteboxTools, dem: string, output: string, out_type: string = "mean depth", damlength: float): byte =
+proc impoundmentSizeIndex*(self: var WhiteboxTools, dem: string, out_mean: string = "", out_max: string = "", out_volume: string = "", out_area: string = "", out_dam_height: string = "", damlength: float): byte =
     ## Calculates the impoundment size resulting from damming a DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#ImpoundmentSizeIndex) for more details.
     ##
     ## Keyword arguments:
     ##
     ## - dem: Input raster DEM file.
-    ## - output: Output file.
-    ## - out_type: Output type; one of 'mean depth' (default), 'volume', 'area', 'max depth'.
+    ## - out_mean: Output mean flooded depth file.
+    ## - out_max: Output maximum flooded depth file.
+    ## - out_volume: Output flooded volume file.
+    ## - out_area: Output flooded area file.
+    ## - out_dam_height: Output dam height file.
     ## - damlength: Maximum length of the dam.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
-    args.add(fmt"--output={output}")
-    args.add(fmt"--out_type={out_type}")
+    args.add(fmt"--out_mean={out_mean}")
+    args.add(fmt"--out_max={out_max}")
+    args.add(fmt"--out_volume={out_volume}")
+    args.add(fmt"--out_area={out_area}")
+    args.add(fmt"--out_dam_height={out_dam_height}")
     args.add(fmt"--damlength={damlength}")
     result = self.runTool("ImpoundmentSizeIndex", args)
 
@@ -3269,6 +3715,19 @@ proc intersect*(self: var WhiteboxTools, input: string, overlay: string, output:
     args.add(fmt"--snap={snap}")
     result = self.runTool("Intersect", args)
 
+proc inversePrincipalComponentAnalysis*(self: var WhiteboxTools, inputs: string, report: string): byte =
+    ## This tool performs an inverse principal component analysis on a series of input component images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#InversePrincipalComponentAnalysis) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Name of the input PCA component images.
+    ## - report: Name of the PCA report file (*.html).
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--report={report}")
+    result = self.runTool("InversePrincipalComponentAnalysis", args)
+
 proc isNoData*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Identifies NoData valued pixels in an image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#IsNoData) for more details.
@@ -3337,7 +3796,7 @@ proc joinTables*(self: var WhiteboxTools, input1: string, pkey: string, input2: 
 
 proc kMeansClustering*(self: var WhiteboxTools, inputs: string, output: string, out_html: string = "", classes: int, max_iterations: int = 10, class_change: float = 2.0, initialize: string = "diagonal", min_class_size: int = 10): byte =
     ## Performs a k-means clustering operation on a multi-spectral dataset.
-    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools.html#KMeansClustering) for more details.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#KMeansClustering) for more details.
     ##
     ## Keyword arguments:
     ##
@@ -3393,6 +3852,56 @@ proc kappaIndex*(self: var WhiteboxTools, input1: string, input2: string, output
     args.add(fmt"--input2={input2}")
     args.add(fmt"--output={output}")
     result = self.runTool("KappaIndex", args)
+
+proc knnClassification*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", training: string, field: string, output: string, k: int = 5, clip: bool = true, test_proportion: float = 0.2): byte =
+    ## Performs a supervised k-nearest neighbour classification using training site polygons/points and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#KnnClassification) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - training: Name of the input training site polygons/points shapefile.
+    ## - field: Name of the attribute containing class name data.
+    ## - output: Name of the output raster file.
+    ## - k: k-parameter, which determines the number of nearest neighbours used.
+    ## - clip: Perform training data clipping to remove outlier pixels?
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"-k={k}")
+    args.add(fmt"--clip={clip}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("KnnClassification", args)
+
+proc knnRegression*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", training: string, field: string, output: string = "", k: int = 5, weight: bool = true, test_proportion: float = 0.2): byte =
+    ## Performs a supervised k-nearest neighbour regression using training site points and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#KnnRegression) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - training: Name of the input training site points Shapefile.
+    ## - field: Name of the attribute containing response variable name data.
+    ## - output: Name of the output raster file.
+    ## - k: k-parameter, which determines the number of nearest neighbours used.
+    ## - weight: Use distance weighting?
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"-k={k}")
+    args.add(fmt"--weight={weight}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("KnnRegression", args)
 
 proc ksTestForNormality*(self: var WhiteboxTools, input: string, output: string, num_samples = none(int)): byte =
     ## Evaluates whether the values in a raster are normally distributed.
@@ -3453,6 +3962,19 @@ proc lasToAscii*(self: var WhiteboxTools, inputs: string): byte =
     args.add(fmt"--inputs={inputs}")
     result = self.runTool("LasToAscii", args)
 
+proc lasToLaz*(self: var WhiteboxTools, input: string = "", output: string = ""): byte =
+    ## This tool converts one or more LAS files into the LAZ format
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LasToLaz) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LAS files (leave blank to use all LAS files in WorkingDirectory.
+    ## - output: Output LAZ file (including extension).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("LasToLaz", args)
+
 proc lasToMultipointShapefile*(self: var WhiteboxTools, input: string = ""): byte =
     ## Converts one or more LAS files into MultipointZ vector Shapefiles. When the input parameter is not specified, the tool grids all LAS files contained within the working directory.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LasToMultipointShapefile) for more details.
@@ -3475,7 +3997,7 @@ proc lasToShapefile*(self: var WhiteboxTools, input: string = ""): byte =
     args.add(fmt"--input={input}")
     result = self.runTool("LasToShapefile", args)
 
-proc lasToZlidar*(self: var WhiteboxTools, inputs: string = "", outdir: string = ""): byte =
+proc lasToZlidar*(self: var WhiteboxTools, inputs: string = "", outdir: string = "", compress: string = "brotli", level: int = 5): byte =
     ## Converts one or more LAS files into the zlidar compressed LiDAR data format.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LasToZlidar) for more details.
     ##
@@ -3483,9 +4005,13 @@ proc lasToZlidar*(self: var WhiteboxTools, inputs: string = "", outdir: string =
     ##
     ## - inputs: Input LAS files.
     ## - outdir: Output directory into which zlidar files are created. If unspecified, it is assumed to be the same as the inputs.
+    ## - compress: Compression method, including 'brotli' and 'deflate'.
+    ## - level: Compression level (1-9).
     var args = newSeq[string]()
     args.add(fmt"--inputs={inputs}")
     args.add(fmt"--outdir={outdir}")
+    args.add(fmt"--compress={compress}")
+    args.add(fmt"--level={level}")
     result = self.runTool("LasToZlidar", args)
 
 proc layerFootprint*(self: var WhiteboxTools, input: string, output: string): byte =
@@ -3501,6 +4027,19 @@ proc layerFootprint*(self: var WhiteboxTools, input: string, output: string): by
     args.add(fmt"--output={output}")
     result = self.runTool("LayerFootprint", args)
 
+proc lazToLas*(self: var WhiteboxTools, input: string = "", output: string = ""): byte =
+    ## This tool converts one or more LAZ files into the LAS format
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LazToLas) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LAZ files (leave blank to use all LAZ files in WorkingDirectory.
+    ## - output: Output LAS file (including extension).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("LazToLas", args)
+
 proc leeSigmaFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 11, filtery: int = 11, sigma: float = 10.0, m: float = 5.0): byte =
     ## Performs a Lee (Sigma) smoothing filter on an image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_filters.html#LeeSigmaFilter) for more details.
@@ -3511,7 +4050,7 @@ proc leeSigmaFilter*(self: var WhiteboxTools, input: string, output: string, fil
     ## - output: Output raster file.
     ## - filterx: Size of the filter kernel in the x-direction.
     ## - filtery: Size of the filter kernel in the y-direction.
-    ## - sigma: Sigma value should be related to the standarad deviation of the distribution of image speckle noise.
+    ## - sigma: Sigma value should be related to the standard deviation of the distribution of image speckle noise.
     ## - m: M-threshold value the minimum allowable number of pixels within the intensity range
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
@@ -3591,7 +4130,7 @@ proc lidarBlockMinimum*(self: var WhiteboxTools, input: string = "", output: str
     result = self.runTool("LidarBlockMinimum", args)
 
 proc lidarClassifySubset*(self: var WhiteboxTools, base: string, subset: string, output: string, subset_class: float, nonsubset_class = none(float)): byte =
-    ## Classifies the values in one LiDAR point cloud that correpond with points in a subset cloud.
+    ## Classifies the values in one LiDAR point cloud that correspond with points in a subset cloud.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarClassifySubset) for more details.
     ##
     ## Keyword arguments:
@@ -3624,6 +4163,38 @@ proc lidarColourize*(self: var WhiteboxTools, in_lidar: string, in_image: string
     args.add(fmt"--in_image={in_image}")
     args.add(fmt"--output={output}")
     result = self.runTool("LidarColourize", args)
+
+proc lidarContour*(self: var WhiteboxTools, input: string = "", output: string = "", interval: float = 10.0, smooth: int = 5, parameter: string = "elevation", returns: string = "all", exclude_cls: string = "", minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
+    ## This tool creates a vector contour coverage from an input LiDAR point file.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarContour) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LiDAR points.
+    ## - output: Name of the output vector lines file.
+    ## - interval: Contour interval.
+    ## - smooth: Smoothing filter size (in num. points), e.g. 3, 5, 7, 9, 11...
+    ## - parameter: Interpolation parameter; options are 'elevation' (default), 'intensity', 'user_data'.
+    ## - returns: Point return types to include; options are 'all' (default), 'last', 'first'.
+    ## - exclude_cls: Optional exclude classes from interpolation; Valid class values range from 0 to 18, based on LAS specifications. Example, --exclude_cls='3,4,5,6,7,18'.
+    ## - minz: Optional minimum elevation for inclusion in interpolation.
+    ## - maxz: Optional maximum elevation for inclusion in interpolation.
+    ## - max_triangle_edge_length: Optional maximum triangle edge length; triangles larger than this size will not be gridded.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--interval={interval}")
+    args.add(fmt"--smooth={smooth}")
+    args.add(fmt"--parameter={parameter}")
+    args.add(fmt"--returns={returns}")
+    args.add(fmt"--exclude_cls={exclude_cls}")
+    if minz.isSome:
+        args.add(fmt"--minz={minz}")
+    if maxz.isSome:
+        args.add(fmt"--maxz={maxz}")
+    if max_triangle_edge_length.isSome:
+        args.add(fmt"--max_triangle_edge_length={max_triangle_edge_length}")
+    result = self.runTool("LidarContour", args)
 
 proc lidarDigitalSurfaceModel*(self: var WhiteboxTools, input: string = "", output: string = "", resolution: float = 1.0, radius: float = 0.5, minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
     ## Creates a top-surface digital surface model (DSM) from a LiDAR point cloud.
@@ -3686,7 +4257,7 @@ proc lidarGroundPointFilter*(self: var WhiteboxTools, input: string, output: str
     ## - input: Input LiDAR file.
     ## - output: Output LiDAR file.
     ## - radius: Search Radius.
-    ## - min_neighbours: The minimum number of neighbouring points within search areas. If fewer points than this threshold are idenfied during the fixed-radius search, a subsequent kNN search is performed to identify the k number of neighbours.
+    ## - min_neighbours: The minimum number of neighbouring points within search areas. If fewer points than this threshold are identified during the fixed-radius search, a subsequent kNN search is performed to identify the k number of neighbours.
     ## - slope_threshold: Maximum inter-point slope to be considered an off-terrain point.
     ## - height_threshold: Inter-point height difference to be considered an off-terrain point.
     ## - classify: Classify points as ground (2) or off-ground (1).
@@ -3748,7 +4319,7 @@ proc lidarHistogram*(self: var WhiteboxTools, input: string, output: string, par
     ##
     ## - input: Input LiDAR file.
     ## - output: Output HTML file (default name will be based on input file if unspecified).
-    ## - parameter: Parameter; options are 'elevation' (default), 'intensity', 'scan angle', 'class'.
+    ## - parameter: Parameter; options are 'elevation' (default), 'intensity', 'scan angle', 'class', 'time'.
     ## - clip: Amount to clip distribution tails (in percent).
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
@@ -3892,6 +4463,19 @@ proc lidarPointDensity*(self: var WhiteboxTools, input: string = "", output: str
     if maxz.isSome:
         args.add(fmt"--maxz={maxz}")
     result = self.runTool("LidarPointDensity", args)
+
+proc lidarPointReturnAnalysis*(self: var WhiteboxTools, input: string, output: string = ""): byte =
+    ## This tool performs a quality control check on the return values of points in a LiDAR file.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarPointReturnAnalysis) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LiDAR points.
+    ## - output: Name of the output LiDAR points.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("LidarPointReturnAnalysis", args)
 
 proc lidarPointStats*(self: var WhiteboxTools, input: string = "", resolution: float = 1.0, num_points: bool = true, num_pulses = none(bool), avg_points_per_pulse: bool = true, z_range = none(bool), intensity_range = none(bool), predom_class = none(bool)): byte =
     ## Creates several rasters summarizing the distribution of LAS point data. When the input/output parameters are not specified, the tool works on all LAS files contained within the working directory.
@@ -4111,6 +4695,65 @@ proc lidarSegmentationBasedFilter*(self: var WhiteboxTools, input: string, outpu
         args.add(fmt"--classify={classify}")
     result = self.runTool("LidarSegmentationBasedFilter", args)
 
+proc lidarShift*(self: var WhiteboxTools, input: string, output: string, x_shift: float = , y_shift: float = , z_shift: float = ): byte =
+    ## Shifts the x,y,z coordinates of a LiDAR file.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarShift) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LiDAR points.
+    ## - output: Name of the output LiDAR points.
+    ## - x_shift: x-shift value, blank for none.
+    ## - y_shift: y-shift value, blank for none.
+    ## - z_shift: z-shift value, blank for none.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--x_shift={x_shift}")
+    args.add(fmt"--y_shift={y_shift}")
+    args.add(fmt"--z_shift={z_shift}")
+    result = self.runTool("LidarShift", args)
+
+proc lidarSibsonInterpolation*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, exclude_cls: string = "", minz = none(float), maxz = none(float)): byte =
+    ## This tool interpolates one or more LiDAR tiles using Sibson's natural neighbour method.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarSibsonInterpolation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LiDAR points (leave blank to use all files in WorkingDirectory.
+    ## - output: Output raster file (including extension).
+    ## - parameter: Interpolation parameter; options are 'elevation' (default), 'intensity', 'class', 'return_number', 'number_of_returns', 'scan angle', 'user_data'.
+    ## - returns: Point return types to include; options are 'all' (default), 'last', 'first'.
+    ## - resolution: Output raster's grid resolution.
+    ## - exclude_cls: Optional exclude classes from interpolation; Valid class values range from 0 to 18, based on LAS specifications. Example, --exclude_cls='3,4,5,6,7,18'.
+    ## - minz: Optional minimum elevation for inclusion in interpolation.
+    ## - maxz: Optional maximum elevation for inclusion in interpolation.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--parameter={parameter}")
+    args.add(fmt"--returns={returns}")
+    args.add(fmt"--resolution={resolution}")
+    args.add(fmt"--exclude_cls={exclude_cls}")
+    if minz.isSome:
+        args.add(fmt"--minz={minz}")
+    if maxz.isSome:
+        args.add(fmt"--maxz={maxz}")
+    result = self.runTool("LidarSibsonInterpolation", args)
+
+proc lidarSortByTime*(self: var WhiteboxTools, input: string, output: string): byte =
+    ## This sorts the points in a LiDAR file by the GPS time.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarSortByTime) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input LiDAR points.
+    ## - output: Name of the output LiDAR points.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("LidarSortByTime", args)
+
 proc lidarTINGridding*(self: var WhiteboxTools, input: string = "", output: string = "", parameter: string = "elevation", returns: string = "all", resolution: float = 1.0, exclude_cls: string = "7,18", minz = none(float), maxz = none(float), max_triangle_edge_length = none(float)): byte =
     ## Creates a raster grid based on a Delaunay triangular irregular network (TIN) fitted to LiDAR points.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/lidar_tools.html#LidarTINGridding) for more details.
@@ -4151,7 +4794,7 @@ proc lidarThin*(self: var WhiteboxTools, input: string, output: string, resoluti
     ## - output: Output LiDAR file.
     ## - resolution: The size of the square area used to evaluate nearby points in the LiDAR data.
     ## - method_val: Point selection method; options are 'first', 'last', 'lowest' (default), 'highest', 'nearest'.
-    ## - save_filtered: Save filtered points to seperate file?
+    ## - save_filtered: Save filtered points to separate file?
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
@@ -4170,7 +4813,7 @@ proc lidarThinHighDensity*(self: var WhiteboxTools, input: string, output: strin
     ## - output: Output LiDAR file.
     ## - resolution: Output raster's grid resolution.
     ## - density: Max. point density (points / m^3).
-    ## - save_filtered: Save filtered points to seperate file?
+    ## - save_filtered: Save filtered points to separate file?
     var args = newSeq[string]()
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
@@ -4303,7 +4946,7 @@ proc linesToPolygons*(self: var WhiteboxTools, input: string, output: string): b
     result = self.runTool("LinesToPolygons", args)
 
 proc listUniqueValues*(self: var WhiteboxTools, input: string, field: string, output: string): byte =
-    ## Lists the unique values contained in a field witin a vector's attribute table.
+    ## Lists the unique values contained in a field within a vector's attribute table.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#ListUniqueValues) for more details.
     ##
     ## Keyword arguments:
@@ -4330,6 +4973,44 @@ proc ln*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("Ln", args)
 
+proc localHypsometricAnalysis*(self: var WhiteboxTools, input: string, out_mag: string, out_scale: string, min_scale: int = 4, step: int = 1, num_steps: int = 10, step_nonlinearity: float = 1.0): byte =
+    ## This tool calculates a local, neighbourhood-based hypsometric integral raster.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#LocalHypsometricAnalysis) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster DEM file.
+    ## - out_mag: Name of the openness output raster file.
+    ## - out_scale: Name of the openness output raster file.
+    ## - min_scale: Minimum search neighbourhood radius in grid cells.
+    ## - step: Step size as any positive non-zero integer.
+    ## - num_steps: Number of steps.
+    ## - step_nonlinearity: Step nonlinearity factor (1.0-2.0 is typical)
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--out_mag={out_mag}")
+    args.add(fmt"--out_scale={out_scale}")
+    args.add(fmt"--min_scale={min_scale}")
+    args.add(fmt"--step={step}")
+    args.add(fmt"--num_steps={num_steps}")
+    args.add(fmt"--step_nonlinearity={step_nonlinearity}")
+    result = self.runTool("LocalHypsometricAnalysis", args)
+
+proc localQuadraticRegression*(self: var WhiteboxTools, dem: string, output: string, filter: int = 3): byte =
+    ## This tool is an implementation of the constrained quadratic regression algorithm using a flexible window size described in Wood (1996).
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#LocalQuadraticRegression) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file.
+    ## - output: Name of the output raster file.
+    ## - filter: Edge length of the filter kernel.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--filter={filter}")
+    result = self.runTool("LocalQuadraticRegression", args)
+
 proc log10*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Returns the base-10 logarithm of values in a raster.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#Log10) for more details.
@@ -4355,6 +5036,27 @@ proc log2*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
     result = self.runTool("Log2", args)
+
+proc logisticRegression*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", training: string, field: string, output: string = "", test_proportion: float = 0.2): byte =
+    ## Performs a logistic regression analysis using training site polygons/points and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#LogisticRegression) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - training: Name of the input training site polygons/points shapefile.
+    ## - field: Name of the attribute containing class data.
+    ## - output: Name of the output raster file.
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("LogisticRegression", args)
 
 proc longProfile*(self: var WhiteboxTools, d8_pntr: string, streams: string, dem: string, output: string, esri_pntr: bool = false): byte =
     ## Plots the stream longitudinal profiles for one or more rivers.
@@ -4409,6 +5111,21 @@ proc longestFlowpath*(self: var WhiteboxTools, dem: string, basins: string, outp
     args.add(fmt"--output={output}")
     result = self.runTool("LongestFlowpath", args)
 
+proc lowPointsOnHeadwaterDivides*(self: var WhiteboxTools, dem: string, streams: string, output: string): byte =
+    ## This tool locates saddle points along ridges within a digital elevation model (DEM)
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#LowPointsOnHeadwaterDivides) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file.
+    ## - streams: Name of the input stream channel raster file.
+    ## - output: Name of the output vector file.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--streams={streams}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("LowPointsOnHeadwaterDivides", args)
+
 proc lowestPosition*(self: var WhiteboxTools, inputs: string, output: string): byte =
     ## Identifies the stack position of the minimum value within a raster stack on a cell-by-cell basis.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_overlay_tools.html#LowestPosition) for more details.
@@ -4432,7 +5149,7 @@ proc mDInfFlowAccumulation*(self: var WhiteboxTools, dem: string, output: string
     ## - output: Output raster file.
     ## - out_type: Output type; one of 'cells', 'specific contributing area' (default), and 'catchment area'.
     ## - exponent: Optional exponent parameter; default is 1.1.
-    ## - threshold: Optional convergence threshold parameter, in grid cells; default is inifinity.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
     ## - log: Optional flag to request the output be log-transformed.
     ## - clip: Optional flag to request clipping the display max by 1%.
     var args = newSeq[string]()
@@ -4657,6 +5374,19 @@ proc maxOverlay*(self: var WhiteboxTools, inputs: string, output: string): byte 
     args.add(fmt"--output={output}")
     result = self.runTool("MaxOverlay", args)
 
+proc maxUpslopeElevChange*(self: var WhiteboxTools, dem: string, output: string): byte =
+    ## Calculates the maximum upslope change in elevation between a grid cell and its eight downslope neighbors.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MaxUpslopeElevChange) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("MaxUpslopeElevChange", args)
+
 proc maxUpslopeFlowpathLength*(self: var WhiteboxTools, dem: string, output: string): byte =
     ## Measures the maximum length of all upslope flowpaths draining each grid cell.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#MaxUpslopeFlowpathLength) for more details.
@@ -4669,6 +5399,24 @@ proc maxUpslopeFlowpathLength*(self: var WhiteboxTools, dem: string, output: str
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
     result = self.runTool("MaxUpslopeFlowpathLength", args)
+
+proc maximalCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
+    ## Calculates a mean curvature raster from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MaximalCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("MaximalCurvature", args)
 
 proc maximumFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 11, filtery: int = 11): byte =
     ## Assigns each cell in the output grid the maximum value in a moving window centred on each grid cell in the input raster.
@@ -4686,6 +5434,24 @@ proc maximumFilter*(self: var WhiteboxTools, input: string, output: string, filt
     args.add(fmt"--filterx={filterx}")
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("MaximumFilter", args)
+
+proc meanCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
+    ## Calculates a mean curvature raster from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MeanCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("MeanCurvature", args)
 
 proc meanFilter*(self: var WhiteboxTools, input: string, output: string, filterx: int = 3, filtery: int = 3): byte =
     ## Performs a mean filter (low-pass filter) on an input image.
@@ -4811,6 +5577,26 @@ proc minAbsoluteOverlay*(self: var WhiteboxTools, inputs: string, output: string
     args.add(fmt"--output={output}")
     result = self.runTool("MinAbsoluteOverlay", args)
 
+proc minDistClassification*(self: var WhiteboxTools, inputs: string, polys: string, field: string, output: string, threshold = none(float)): byte =
+    ## Performs a supervised minimum-distance classification using training site polygons and multi-spectral images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#MinDistClassification) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input band images.
+    ## - polys: Name of the input training site polygons shapefile.
+    ## - field: Name of the attribute containing class name data.
+    ## - output: Name of the output raster file.
+    ## - threshold: Distance threshold, in z-scores; blank for none.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--polys={polys}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    if threshold.isSome:
+        args.add(fmt"--threshold={threshold}")
+    result = self.runTool("MinDistClassification", args)
+
 proc minDownslopeElevChange*(self: var WhiteboxTools, dem: string, output: string): byte =
     ## Calculates the minimum downslope change in elevation between a grid cell and its eight downslope neighbors.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MinDownslopeElevChange) for more details.
@@ -4855,6 +5641,24 @@ proc minOverlay*(self: var WhiteboxTools, inputs: string, output: string): byte 
     args.add(fmt"--inputs={inputs}")
     args.add(fmt"--output={output}")
     result = self.runTool("MinOverlay", args)
+
+proc minimalCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
+    ## Calculates a mean curvature raster from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#MinimalCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Input raster DEM file.
+    ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    if zfactor.isSome:
+        args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("MinimalCurvature", args)
 
 proc minimumBoundingBox*(self: var WhiteboxTools, input: string, output: string, criterion: string = "area", features: bool = true): byte =
     ## Creates a vector minimum bounding rectangle around vector features.
@@ -4937,7 +5741,7 @@ proc minimumFilter*(self: var WhiteboxTools, input: string, output: string, filt
 
 proc modifiedKMeansClustering*(self: var WhiteboxTools, inputs: string, output: string, out_html: string = "", start_clusters: int = 1000, merge_dist = none(float), max_iterations: int = 10, class_change: float = 2.0): byte =
     ## Performs a modified k-means clustering operation on a multi-spectral dataset.
-    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools.html#ModifiedKMeansClustering) for more details.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#ModifiedKMeansClustering) for more details.
     ##
     ## Keyword arguments:
     ##
@@ -5278,7 +6082,7 @@ proc negate*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("Negate", args)
 
-proc newRasterFromBase*(self: var WhiteboxTools, base: string, output: string, value: string = "nodata", data_type: string = "float"): byte =
+proc newRasterFromBase*(self: var WhiteboxTools, base: string, output: string, value: string = "nodata", data_type: string = "float", cell_size = none(float)): byte =
     ## Creates a new raster using a base image.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/data_tools.html#NewRasterFromBase) for more details.
     ##
@@ -5288,11 +6092,14 @@ proc newRasterFromBase*(self: var WhiteboxTools, base: string, output: string, v
     ## - output: Output raster file.
     ## - value: Constant value to fill raster with; either 'nodata' or numeric value.
     ## - data_type: Output raster data type; options include 'double' (64-bit), 'float' (32-bit), and 'integer' (signed 16-bit) (default is 'float').
+    ## - cell_size: Optionally specified cell size of output raster. Not used when base raster is specified.
     var args = newSeq[string]()
     args.add(fmt"--base={base}")
     args.add(fmt"--output={output}")
     args.add(fmt"--value={value}")
     args.add(fmt"--data_type={data_type}")
+    if cell_size.isSome:
+        args.add(fmt"--cell_size={cell_size}")
     result = self.runTool("NewRasterFromBase", args)
 
 proc normalVectors*(self: var WhiteboxTools, input: string, output: string, radius: float = 1.0): byte =
@@ -5432,6 +6239,23 @@ proc opening*(self: var WhiteboxTools, input: string, output: string, filterx: i
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("Opening", args)
 
+proc openness*(self: var WhiteboxTools, input: string, pos_output: string, neg_output: string, dist: int = 20): byte =
+    ## This tool calculates the topographic openness index from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Openness) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster DEM file.
+    ## - pos_output: Name of the positive openness output raster file.
+    ## - neg_output: Name of the negative openness output raster file.
+    ## - dist: Search distance, in grid cells.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--pos_output={pos_output}")
+    args.add(fmt"--neg_output={neg_output}")
+    args.add(fmt"--dist={dist}")
+    result = self.runTool("Openness", args)
+
 proc Or*(self: var WhiteboxTools, input1: string, input2: string, output: string): byte =
     ## Performs a logical OR operator on two Boolean raster images.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#Or) for more details.
@@ -5487,6 +6311,23 @@ proc panchromaticSharpening*(self: var WhiteboxTools, red: string = "", green: s
     args.add(fmt"--output={output}")
     args.add(fmt"--method_val={method_val}")
     result = self.runTool("PanchromaticSharpening", args)
+
+proc parallelepipedClassification*(self: var WhiteboxTools, inputs: string, polys: string, field: string, output: string): byte =
+    ## Performs a supervised parallelepiped classification using training site polygons and multi-spectral images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools_classification.html#ParallelepipedClassification) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Name of the input band images.
+    ## - polys: Name of the input training site polygons shapefile.
+    ## - field: Name of the attribute containing class name data.
+    ## - output: Name of the output raster file.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--polys={polys}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("ParallelepipedClassification", args)
 
 proc patchOrientation*(self: var WhiteboxTools, input: string): byte =
     ## Calculates the orientation of vector polygons.
@@ -5554,7 +6395,7 @@ proc percentEqualTo*(self: var WhiteboxTools, inputs: string, comparison: string
     result = self.runTool("PercentEqualTo", args)
 
 proc percentGreaterThan*(self: var WhiteboxTools, inputs: string, comparison: string, output: string): byte =
-    ## Calculates the percentage of a raster stack that have cell values greather than an input on a cell-by-cell basis.
+    ## Calculates the percentage of a raster stack that have cell values greater than an input on a cell-by-cell basis.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_overlay_tools.html#PercentGreaterThan) for more details.
     ##
     ## Keyword arguments:
@@ -5632,6 +6473,21 @@ proc perimeterAreaRatio*(self: var WhiteboxTools, input: string): byte =
     args.add(fmt"--input={input}")
     result = self.runTool("PerimeterAreaRatio", args)
 
+proc phiCoefficient*(self: var WhiteboxTools, input1: string, input2: string, output: string): byte =
+    ## This tool performs a binary classification accuracy assessment.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#PhiCoefficient) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input1: Name of the first input raster image file.
+    ## - input2: Name of the second input raster image file.
+    ## - output: Name of the output HTML file.
+    var args = newSeq[string]()
+    args.add(fmt"--input1={input1}")
+    args.add(fmt"--input2={input2}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("PhiCoefficient", args)
+
 proc pickFromList*(self: var WhiteboxTools, inputs: string, pos_input: string, output: string): byte =
     ## Outputs the value from a raster stack specified by a position raster.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_overlay_tools.html#PickFromList) for more details.
@@ -5647,7 +6503,7 @@ proc pickFromList*(self: var WhiteboxTools, inputs: string, pos_input: string, o
     args.add(fmt"--output={output}")
     result = self.runTool("PickFromList", args)
 
-proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
+proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
     ## Calculates a plan (contour) curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#PlanCurvature) for more details.
     ##
@@ -5655,10 +6511,12 @@ proc planCurvature*(self: var WhiteboxTools, dem: string, output: string, zfacto
     ##
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
     ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
     if zfactor.isSome:
         args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("PlanCurvature", args)
@@ -5812,7 +6670,7 @@ proc profile*(self: var WhiteboxTools, lines: string, surface: string, output: s
     args.add(fmt"--output={output}")
     result = self.runTool("Profile", args)
 
-proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
+proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
     ## Calculates a profile curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ProfileCurvature) for more details.
     ##
@@ -5820,13 +6678,41 @@ proc profileCurvature*(self: var WhiteboxTools, dem: string, output: string, zfa
     ##
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
     ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
     if zfactor.isSome:
         args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("ProfileCurvature", args)
+
+proc qinFlowAccumulation*(self: var WhiteboxTools, dem: string, output: string, out_type: string = "specific contributing area", exponent: float = 10.0, max_slope: float = 45.0, threshold = none(float), log: bool = false, clip: bool = false): byte =
+    ## This tool calculates Qin et al. (2007) flow accumulation.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#QinFlowAccumulation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file; must be depressionless.
+    ## - output: Name of the output raster file.
+    ## - out_type: Output type; one of 'cells', 'specific contributing area' (default), and 'catchment area'.
+    ## - exponent: Optional upper-bound exponent parameter; default is 10.0.
+    ## - max_slope: Optional upper-bound slope parameter, in degrees (0-90); default is 45.0.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
+    ## - log: Log-transform the output values?
+    ## - clip: Optional flag to request clipping the display max by 1%.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--out_type={out_type}")
+    args.add(fmt"--exponent={exponent}")
+    args.add(fmt"--max_slope={max_slope}")
+    if threshold.isSome:
+        args.add(fmt"--threshold={threshold}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--clip={clip}")
+    result = self.runTool("QinFlowAccumulation", args)
 
 proc quantiles*(self: var WhiteboxTools, input: string, output: string, num_quantiles: int = 5): byte =
     ## Transforms raster values into quantiles.
@@ -5842,6 +6728,30 @@ proc quantiles*(self: var WhiteboxTools, input: string, output: string, num_quan
     args.add(fmt"--output={output}")
     args.add(fmt"--num_quantiles={num_quantiles}")
     result = self.runTool("Quantiles", args)
+
+proc quinnFlowAccumulation*(self: var WhiteboxTools, dem: string, output: string, out_type: string = "specific contributing area", exponent: float = 1.0, threshold = none(float), log: bool = false, clip: bool = false): byte =
+    ## This tool calculates Quinn et al. (1995) flow accumulation.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#QuinnFlowAccumulation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input DEM raster file; must be depressionless.
+    ## - output: Name of the output raster file.
+    ## - out_type: Output type; one of 'cells', 'specific contributing area' (default), and 'catchment area'.
+    ## - exponent: Optional exponent parameter; default is 1.0.
+    ## - threshold: Optional convergence threshold parameter, in grid cells; default is infinity.
+    ## - log: Log-transform the output values?
+    ## - clip: Optional flag to request clipping the display max by 1%.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--out_type={out_type}")
+    args.add(fmt"--exponent={exponent}")
+    if threshold.isSome:
+        args.add(fmt"--threshold={threshold}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--clip={clip}")
+    result = self.runTool("QuinnFlowAccumulation", args)
 
 proc radialBasisFunctionInterpolation*(self: var WhiteboxTools, input: string, field: string, use_z: bool = false, output: string, radius = none(float), min_points = none(int), func_type: string = "ThinPlateSpline", poly_order: string = "none", weight: float = 0.1, cell_size = none(float), base: string = ""): byte =
     ## Interpolates vector points into a raster surface using a radial basis function scheme.
@@ -5924,6 +6834,58 @@ proc randomField*(self: var WhiteboxTools, base: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("RandomField", args)
 
+proc randomForestClassification*(self: var WhiteboxTools, inputs: string, training: string, field: string, output: string = "", split_criterion: string = "Gini", n_trees: int = 500, min_samples_leaf: int = 1, min_samples_split: int = 2, test_proportion: float = 0.2): byte =
+    ## Performs a supervised random forest classification using training site polygons/points and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#RandomForestClassification) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - training: Name of the input training site polygons/points shapefile.
+    ## - field: Name of the attribute containing class data.
+    ## - output: Name of the output raster file.
+    ## - split_criterion: Split criterion to use when building a tree. Options include 'Gini', 'Entropy', and 'ClassificationError'
+    ## - n_trees: The number of trees in the forest.
+    ## - min_samples_leaf: The minimum number of samples required to be at a leaf node.
+    ## - min_samples_split: The minimum number of samples required to split an internal node.
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--split_criterion={split_criterion}")
+    args.add(fmt"--n_trees={n_trees}")
+    args.add(fmt"--min_samples_leaf={min_samples_leaf}")
+    args.add(fmt"--min_samples_split={min_samples_split}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("RandomForestClassification", args)
+
+proc randomForestRegression*(self: var WhiteboxTools, inputs: string, training: string, field: string, output: string = "", n_trees: int = 100, min_samples_leaf: int = 1, min_samples_split: int = 2, test_proportion: float = 0.2): byte =
+    ## Performs a random forest regression analysis using training site data and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#RandomForestRegression) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - training: Name of the input training site points shapefile.
+    ## - field: Name of the attribute containing response variable name data.
+    ## - output: Name of the output raster file. This parameter is optional. When unspecified, the tool will only build the model. When specified, the tool will use the built model and predictor rasters to perform a spatial prediction.
+    ## - n_trees: The number of trees in the forest.
+    ## - min_samples_leaf: The minimum number of samples required to be at a leaf node.
+    ## - min_samples_split: The minimum number of samples required to split an internal node.
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--n_trees={n_trees}")
+    args.add(fmt"--min_samples_leaf={min_samples_leaf}")
+    args.add(fmt"--min_samples_split={min_samples_split}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("RandomForestRegression", args)
+
 proc randomSample*(self: var WhiteboxTools, base: string, output: string, num_samples: int = 1000): byte =
     ## Creates an image containing randomly located sample grid cells with unique IDs.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#RandomSample) for more details.
@@ -5974,6 +6936,19 @@ proc rasterArea*(self: var WhiteboxTools, input: string, output: string = "", ou
     args.add(fmt"--units={units}")
     args.add(fmt"--zero_back={zero_back}")
     result = self.runTool("RasterArea", args)
+
+proc rasterCalculator*(self: var WhiteboxTools, statement: string = "", output: string): byte =
+    ## This tool performs a complex mathematical operations on one or more input raster images on a cell-to-cell basis.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#RasterCalculator) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - statement: Statement e.g. cos("raster1") * 35.0 + "raster2". This statement must be a valid Rust statement.
+    ## - output: Name of the output raster file.
+    var args = newSeq[string]()
+    args.add(fmt"--statement={statement}")
+    args.add(fmt"--output={output}")
+    result = self.runTool("RasterCalculator", args)
 
 proc rasterCellAssignment*(self: var WhiteboxTools, input: string, output: string, assign: string = "column"): byte =
     ## Assign row or column number to cells.
@@ -6175,6 +7150,56 @@ proc reclassFromFile*(self: var WhiteboxTools, input: string, reclass_file: stri
     args.add(fmt"--output={output}")
     result = self.runTool("ReclassFromFile", args)
 
+proc reconcileMultipleHeaders*(self: var WhiteboxTools, input: string, region_field: string, yield_field: string, output: string, radius = none(float), min_yield = none(float), max_yield = none(float), mean_tonnage = none(float)): byte =
+    ## This tool adjusts the crop yield values for data sets collected with multiple headers or combines.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#ReconcileMultipleHeaders) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - region_field: Name of the attribute containing region data.
+    ## - yield_field: Name of the attribute containing yield data.
+    ## - output: Name of the output points shapefile.
+    ## - radius: Optional search radius, in metres. Only specify this value if you want to calculate locally normalized yield.
+    ## - min_yield: Minimum yield value in output.
+    ## - max_yield: Maximum yield value in output.
+    ## - mean_tonnage: Use this optional parameter to force the output to have a certain overall average tonnage.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--region_field={region_field}")
+    args.add(fmt"--yield_field={yield_field}")
+    args.add(fmt"--output={output}")
+    if radius.isSome:
+        args.add(fmt"--radius={radius}")
+    if min_yield.isSome:
+        args.add(fmt"--min_yield={min_yield}")
+    if max_yield.isSome:
+        args.add(fmt"--max_yield={max_yield}")
+    if mean_tonnage.isSome:
+        args.add(fmt"--mean_tonnage={mean_tonnage}")
+    result = self.runTool("ReconcileMultipleHeaders", args)
+
+proc recreatePassLines*(self: var WhiteboxTools, input: string, yield_field_name: string, output_lines: string, output_points: string, max_change_in_heading: float = 25.0, ignore_zeros: bool = false): byte =
+    ## This tool can be used to approximate the harvester pass lines from yield points.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#RecreatePassLines) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - yield_field_name: Name of the attribute containing yield data.
+    ## - output_lines: Name of the output pass lines shapefile.
+    ## - output_points: Name of the output points shapefile.
+    ## - max_change_in_heading: Max change in heading.
+    ## - ignore_zeros: Ignore zero-valued yield points?
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--yield_field_name={yield_field_name}")
+    args.add(fmt"--output_lines={output_lines}")
+    args.add(fmt"--output_points={output_points}")
+    args.add(fmt"--max_change_in_heading={max_change_in_heading}")
+    args.add(fmt"--ignore_zeros={ignore_zeros}")
+    result = self.runTool("RecreatePassLines", args)
+
 proc reinitializeAttributeTable*(self: var WhiteboxTools, input: string): byte =
     ## Reinitializes a vector's attribute table deleting all fields but the feature ID (FID).
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/data_tools.html#ReinitializeAttributeTable) for more details.
@@ -6232,6 +7257,26 @@ proc relativeTopographicPosition*(self: var WhiteboxTools, dem: string, output: 
     args.add(fmt"--filtery={filtery}")
     result = self.runTool("RelativeTopographicPosition", args)
 
+proc removeFieldEdgePoints*(self: var WhiteboxTools, input: string, output: string, dist = none(float), max_change_in_heading: float = 25.0, flag_edges: bool = false): byte =
+    ## This tool can be used to remove, or flag, most of the points along the edges from a crop yield data set.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#RemoveFieldEdgePoints) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - output: Name of the output points shapefile.
+    ## - dist: Average distance between passes, in meters.
+    ## - max_change_in_heading: Max change in heading.
+    ## - flag_edges: Don't remove edge points, just flag them in the attribute table?
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    if dist.isSome:
+        args.add(fmt"--dist={dist}")
+    args.add(fmt"--max_change_in_heading={max_change_in_heading}")
+    args.add(fmt"--flag_edges={flag_edges}")
+    result = self.runTool("RemoveFieldEdgePoints", args)
+
 proc removeOffTerrainObjects*(self: var WhiteboxTools, dem: string, output: string, filter: int = 11, slope: float = 15.0): byte =
     ## Removes off-terrain objects from a raster digital elevation model (DEM).
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#RemoveOffTerrainObjects) for more details.
@@ -6271,7 +7316,7 @@ proc removeShortStreams*(self: var WhiteboxTools, d8_pntr: string, streams: stri
     ## - d8_pntr: Input raster D8 pointer file.
     ## - streams: Input raster streams file.
     ## - output: Output raster file.
-    ## - min_length: Minimum tributary length (in map units) used for network prunning.
+    ## - min_length: Minimum tributary length (in map units) used for network pruning.
     ## - esri_pntr: D8 pointer uses the ESRI style scheme.
     var args = newSeq[string]()
     args.add(fmt"--d8_pntr={d8_pntr}")
@@ -6295,6 +7340,21 @@ proc removeSpurs*(self: var WhiteboxTools, input: string, output: string, iterat
     args.add(fmt"--output={output}")
     args.add(fmt"--iterations={iterations}")
     result = self.runTool("RemoveSpurs", args)
+
+proc repairStreamVectorTopology*(self: var WhiteboxTools, input: string, output: string, dist: float = ): byte =
+    ## This tool resolves topological errors and inconsistencies associated with digitized vector streams.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/stream_network_analysis.html#RepairStreamVectorTopology) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input lines vector file.
+    ## - output: Name of the output lines vector file.
+    ## - dist: Snap distance, in xy units (metres).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--dist={dist}")
+    result = self.runTool("RepairStreamVectorTopology", args)
 
 proc resample*(self: var WhiteboxTools, inputs: string, output: string, cell_size = none(float), base: string = "", method_val: string = "cc"): byte =
     ## Resamples one or more input images into a destination image.
@@ -6362,6 +7422,29 @@ proc rgbToIhs*(self: var WhiteboxTools, red: string = "", green: string = "", bl
     args.add(fmt"--saturation={saturation}")
     result = self.runTool("RgbToIhs", args)
 
+proc rho8FlowAccumulation*(self: var WhiteboxTools, input: string, output: string, out_type: string = "specific contributing area", log: bool = false, clip: bool = false, pntr: bool = false, esri_pntr: bool = false): byte =
+    ## This tool calculates Fairfield and Leymarie (1991) flow accumulation.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#Rho8FlowAccumulation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Input DEM or Rho8 pointer file; if a DEM is used, it must be depressionless.
+    ## - output: Name of the output raster file.
+    ## - out_type: Output type; one of 'cells', 'specific contributing area' (default), and 'catchment area'.
+    ## - log: Log-transform the output values?
+    ## - clip: Optional flag to request clipping the display max by 1%.
+    ## - pntr: Is the input raster a Rho8 flow pointer rather than a DEM?
+    ## - esri_pntr: Does the input Rho8 pointer use the ESRI style scheme?
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--out_type={out_type}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--clip={clip}")
+    args.add(fmt"--pntr={pntr}")
+    args.add(fmt"--esri_pntr={esri_pntr}")
+    result = self.runTool("Rho8FlowAccumulation", args)
+
 proc rho8Pointer*(self: var WhiteboxTools, dem: string, output: string, esri_pntr: bool = false): byte =
     ## Calculates a stochastic Rho8 flow pointer raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#Rho8Pointer) for more details.
@@ -6376,6 +7459,23 @@ proc rho8Pointer*(self: var WhiteboxTools, dem: string, output: string, esri_pnt
     args.add(fmt"--output={output}")
     args.add(fmt"--esri_pntr={esri_pntr}")
     result = self.runTool("Rho8Pointer", args)
+
+proc ringCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates ring curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#RingCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("RingCurvature", args)
 
 proc robertsCrossFilter*(self: var WhiteboxTools, input: string, output: string, clip: float = 0.0): byte =
     ## Performs a Robert's cross edge-detection filter on an image.
@@ -6404,6 +7504,23 @@ proc rootMeanSquareError*(self: var WhiteboxTools, input: string, base: string):
     args.add(fmt"--input={input}")
     args.add(fmt"--base={base}")
     result = self.runTool("RootMeanSquareError", args)
+
+proc rotor*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates rotor from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Rotor) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("Rotor", args)
 
 proc round*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Rounds the values in an input raster to the nearest integer value.
@@ -6498,6 +7615,58 @@ proc setNodataValue*(self: var WhiteboxTools, input: string, output: string, bac
     args.add(fmt"--back_value={back_value}")
     result = self.runTool("SetNodataValue", args)
 
+proc shadowAnimation*(self: var WhiteboxTools, input: string, palette: string = "atlas", output: string, max_dist: int = , date: string = "21/06/2021", interval: int = 15, location: string = "43.5448/-80.2482/-4", height: int = 600, delay: int = 250, label: string = ""): byte =
+    ## This tool creates an animated GIF of shadows based on an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ShadowAnimation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input digital surface model (DSM) raster file.
+    ## - palette: DSM image palette; options are 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'light_quant', 'purple', 'viridis', 'gn_yl', 'pi_y_g', 'bl_yl_rd', 'deep', and 'none'.
+    ## - output: Name of the output HTML file (*.html).
+    ## - max_dist: Optional maximum search distance, in xy units. Minimum value is 5 x cell size.
+    ## - date: Date in format DD/MM/YYYY.
+    ## - interval: Time interval, in minutes (1-60).
+    ## - location: Location, defined as Lat/Long/UTC-offset (e.g. 43.5448/-80.2482/-4).
+    ## - height: Image height, in pixels.
+    ## - delay: GIF time delay in milliseconds.
+    ## - label: Label text (leave blank for none)
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--palette={palette}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--max_dist={max_dist}")
+    args.add(fmt"--date={date}")
+    args.add(fmt"--interval={interval}")
+    args.add(fmt"--location={location}")
+    args.add(fmt"--height={height}")
+    args.add(fmt"--delay={delay}")
+    args.add(fmt"--label={label}")
+    result = self.runTool("ShadowAnimation", args)
+
+proc shadowImage*(self: var WhiteboxTools, input: string, palette: string = "soft", output: string, max_dist: int = , date: string = "21/06/2021", time: string = "13:00", location: string = "43.5448/-80.2482/-4"): byte =
+    ## This tool creates a raster of shadow areas based on an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ShadowImage) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input digital surface model (DSM) raster file.
+    ## - palette: DSM image palette; options are 'atlas', 'high_relief', 'arid', 'soft', 'muted', 'light_quant', 'purple', 'viridi', 'gn_yl', 'pi_y_g', 'bl_yl_rd', 'deep', and 'none'.
+    ## - output: Name of the output raster file.
+    ## - max_dist: Optional maximum search distance, in xy unites. Minimum value is 5 x cell size.
+    ## - date: Date in format DD/MM/YYYY.
+    ## - time: Time in format HH::MM, e.g. 03:15AM or 14:30
+    ## - location: Location, defined as Lat/Long/UTC-offset (e.g. 43.5448/-80.2482/-4).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--palette={palette}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--max_dist={max_dist}")
+    args.add(fmt"--date={date}")
+    args.add(fmt"--time={time}")
+    args.add(fmt"--location={location}")
+    result = self.runTool("ShadowImage", args)
+
 proc shapeComplexityIndex*(self: var WhiteboxTools, input: string): byte =
     ## Calculates overall polygon shape complexity or irregularity.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_patch_shape_tools.html#ShapeComplexityIndex) for more details.
@@ -6521,6 +7690,21 @@ proc shapeComplexityIndexRaster*(self: var WhiteboxTools, input: string, output:
     args.add(fmt"--input={input}")
     args.add(fmt"--output={output}")
     result = self.runTool("ShapeComplexityIndexRaster", args)
+
+proc shapeIndex*(self: var WhiteboxTools, dem: string, output: string, zfactor: float = 1.0): byte =
+    ## This tool calculates the shape index from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#ShapeIndex) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("ShapeIndex", args)
 
 proc shreveStreamMagnitude*(self: var WhiteboxTools, d8_pntr: string, streams: string, output: string, esri_pntr: bool = false, zero_background = none(bool)): byte =
     ## Assigns the Shreve stream magnitude to each link in a stream network.
@@ -6636,6 +7820,25 @@ proc slope*(self: var WhiteboxTools, dem: string, output: string, zfactor = none
     args.add(fmt"--units={units}")
     result = self.runTool("Slope", args)
 
+proc slopeVsAspectPlot*(self: var WhiteboxTools, input: string, output: string, bin_size: float = 2.0, min_slope: float = 0.1, zfactor: float = 1.0): byte =
+    ## This tool creates a slope-aspect relation plot from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#SlopeVsAspectPlot) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input raster image file.
+    ## - output: Name of the output report file (*.html).
+    ## - bin_size: Aspect bin size, in degrees.
+    ## - min_slope: Minimum slope, in degrees.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--bin_size={bin_size}")
+    args.add(fmt"--min_slope={min_slope}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("SlopeVsAspectPlot", args)
+
 proc slopeVsElevationPlot*(self: var WhiteboxTools, inputs: string, watershed: string = "", output: string): byte =
     ## Creates a slope vs. elevation plot for one or more DEMs.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#SlopeVsElevationPlot) for more details.
@@ -6665,6 +7868,25 @@ proc smoothVectors*(self: var WhiteboxTools, input: string, output: string, filt
     args.add(fmt"--output={output}")
     args.add(fmt"--filter={filter}")
     result = self.runTool("SmoothVectors", args)
+
+proc smoothVegetationResidual*(self: var WhiteboxTools, input: string, output: string, max_scale: int = 30, dev_threshold: float = 1.0, scale_threshold: int = 5): byte =
+    ## This tool can smooth the residual roughness due to vegetation cover in LiDAR DEMs.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#SmoothVegetationResidual) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input digital elevation model (DEM) raster file.
+    ## - output: Name of the output raster file.
+    ## - max_scale: Maximum search neighbourhood radius in grid cells.
+    ## - dev_threshold: DEVmax Threshold.
+    ## - scale_threshold: DEVmax scale threshold
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--max_scale={max_scale}")
+    args.add(fmt"--dev_threshold={dev_threshold}")
+    args.add(fmt"--scale_threshold={scale_threshold}")
+    result = self.runTool("SmoothVegetationResidual", args)
 
 proc snapPourPoints*(self: var WhiteboxTools, pour_pts: string, flow_accum: string, output: string, snap_dist: float): byte =
     ## Moves outlet points used to specify points of interest in a watershedding operation to the cell with the highest flow accumulation in its neighbourhood.
@@ -6716,7 +7938,7 @@ proc sphericalStdDevOfNormals*(self: var WhiteboxTools, dem: string, output: str
     result = self.runTool("SphericalStdDevOfNormals", args)
 
 proc splitColourComposite*(self: var WhiteboxTools, input: string, red: string = "", green: string = "", blue: string = ""): byte =
-    ## This tool splits an RGB colour composite image into seperate multispectral images.
+    ## This tool splits an RGB colour composite image into separate multispectral images.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/image_processing_tools.html#SplitColourComposite) for more details.
     ##
     ## Keyword arguments:
@@ -6731,6 +7953,22 @@ proc splitColourComposite*(self: var WhiteboxTools, input: string, red: string =
     args.add(fmt"--green={green}")
     args.add(fmt"--blue={blue}")
     result = self.runTool("SplitColourComposite", args)
+
+proc splitVectorLines*(self: var WhiteboxTools, input: string, output: string, length = none(float)): byte =
+    ## This tool can be used to split a vector line coverage into even-lengthed segments.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis.html#SplitVectorLines) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input lines shapefile.
+    ## - output: Name of the output lines shapefile.
+    ## - length: Maximum segment length (m).
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--output={output}")
+    if length.isSome:
+        args.add(fmt"--length={length}")
+    result = self.runTool("SplitVectorLines", args)
 
 proc splitWithLines*(self: var WhiteboxTools, input: string, split: string, output: string): byte =
     ## Splits the lines or polygons in one layer using the lines in another layer.
@@ -6828,7 +8066,7 @@ proc standardDeviationOfSlope*(self: var WhiteboxTools, input: string, output: s
     result = self.runTool("StandardDeviationOfSlope", args)
 
 proc stochasticDepressionAnalysis*(self: var WhiteboxTools, dem: string, output: string, rmse: float, range: float, iterations: int = 100): byte =
-    ## Preforms a stochastic analysis of depressions within a DEM.
+    ## Performs a stochastic analysis of depressions within a DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/hydrological_analysis.html#StochasticDepressionAnalysis) for more details.
     ##
     ## Keyword arguments:
@@ -7062,6 +8300,60 @@ proc surfaceAreaRatio*(self: var WhiteboxTools, dem: string, output: string): by
     args.add(fmt"--output={output}")
     result = self.runTool("SurfaceAreaRatio", args)
 
+proc svmClassification*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", training: string, field: string, output: string = "", c: float = 200.0, gamma: float = 50.0, tolerance: float = 0.1, test_proportion: float = 0.2): byte =
+    ## Performs an SVM binary classification using training site polygons/points and multiple input images.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#SvmClassification) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - training: Name of the input training site polygons/points Shapefile.
+    ## - field: Name of the attribute containing class data.
+    ## - output: Name of the output raster file.
+    ## - c: c-value, the regularization parameter.
+    ## - gamma: Gamma parameter used in setting the RBF (Gaussian) kernel function.
+    ## - tolerance: The tolerance parameter used in determining the stopping condition.
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"-c={c}")
+    args.add(fmt"--gamma={gamma}")
+    args.add(fmt"--tolerance={tolerance}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("SvmClassification", args)
+
+proc svmRegression*(self: var WhiteboxTools, inputs: string, scaling: string = "Normalize", training: string, field: string, output: string = "", c: float = 50.0, eps: float = 10.0, gamma: float = 0.5, test_proportion: float = 0.2): byte =
+    ## Performs a supervised SVM regression analysis using training site points and predictor rasters.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/machine_learning.html#SvmRegression) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - inputs: Names of the input predictor rasters.
+    ## - scaling: Scaling method for predictors. Options include 'None', 'Normalize', and 'Standardize'
+    ## - training: Name of the input training site points Shapefile.
+    ## - field: Name of the attribute containing class data.
+    ## - output: Name of the output raster file.
+    ## - c: c-value, the regularization parameter.
+    ## - eps: Epsilon in the epsilon-SVR model.
+    ## - gamma: Gamma parameter used in setting the RBF (Gaussian) kernel function.
+    ## - test_proportion: The proportion of the dataset to include in the test split; default is 0.2.
+    var args = newSeq[string]()
+    args.add(fmt"--inputs={inputs}")
+    args.add(fmt"--scaling={scaling}")
+    args.add(fmt"--training={training}")
+    args.add(fmt"--field={field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"-c={c}")
+    args.add(fmt"--eps={eps}")
+    args.add(fmt"--gamma={gamma}")
+    args.add(fmt"--test_proportion={test_proportion}")
+    result = self.runTool("SvmRegression", args)
+
 proc symmetricalDifference*(self: var WhiteboxTools, input: string, overlay: string, output: string, snap: float = 0.0): byte =
     ## Outputs the features that occur in one of the two vector inputs but not both, i.e. no overlapping features.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_overlay_tools.html#SymmetricalDifference) for more details.
@@ -7117,7 +8409,7 @@ proc tan*(self: var WhiteboxTools, input: string, output: string): byte =
     args.add(fmt"--output={output}")
     result = self.runTool("Tan", args)
 
-proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
+proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
     ## Calculates a tangential curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TangentialCurvature) for more details.
     ##
@@ -7125,10 +8417,12 @@ proc tangentialCurvature*(self: var WhiteboxTools, dem: string, output: string, 
     ##
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
     ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
     if zfactor.isSome:
         args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("TangentialCurvature", args)
@@ -7235,6 +8529,35 @@ proc tophatTransform*(self: var WhiteboxTools, input: string, output: string, fi
     args.add(fmt"--variant={variant}")
     result = self.runTool("TophatTransform", args)
 
+proc topographicPositionAnimation*(self: var WhiteboxTools, input: string, palette: string = "bl_yl_rd", output: string, min_scale: int = 1, num_steps: int = 100, step_nonlinearity: float = 1.5, height: int = 600, delay: int = 250, label: string = "", dev_max: bool = false): byte =
+    ## This tool creates an animated GIF of multi-scale local topographic position (elevation deviation).
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TopographicPositionAnimation) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input digital elevation model (DEM) raster file.
+    ## - palette: Image palette; options are 'bl_yl_rd', 'bl_w_rd', 'purple', 'gn_yl', 'pi_y_g', and 'viridis'.
+    ## - output: Name of the output HTML file (*.html).
+    ## - min_scale: Minimum search neighbourhood radius in grid cells.
+    ## - num_steps: Number of steps.
+    ## - step_nonlinearity: Step nonlinearity factor (1.0-2.0 is typical)
+    ## - height: Image height, in pixels.
+    ## - delay: GIF time delay in milliseconds.
+    ## - label: Label text (leave blank for none)
+    ## - dev_max: Do you want to use DEVmax instead of DEV for measuring local topographic position?
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--palette={palette}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--min_scale={min_scale}")
+    args.add(fmt"--num_steps={num_steps}")
+    args.add(fmt"--step_nonlinearity={step_nonlinearity}")
+    args.add(fmt"--height={height}")
+    args.add(fmt"--delay={delay}")
+    args.add(fmt"--label={label}")
+    args.add(fmt"--dev_max={dev_max}")
+    result = self.runTool("TopographicPositionAnimation", args)
+
 proc topologicalStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: string, output: string, esri_pntr: bool = false, zero_background = none(bool)): byte =
     ## Assigns each link in a stream network its topological order.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/stream_network_analysis.html#TopologicalStreamOrder) for more details.
@@ -7255,7 +8578,7 @@ proc topologicalStreamOrder*(self: var WhiteboxTools, d8_pntr: string, streams: 
         args.add(fmt"--zero_background={zero_background}")
     result = self.runTool("TopologicalStreamOrder", args)
 
-proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, zfactor = none(float)): byte =
+proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor = none(float)): byte =
     ## Calculates a total curvature raster from an input DEM.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#TotalCurvature) for more details.
     ##
@@ -7263,10 +8586,12 @@ proc totalCurvature*(self: var WhiteboxTools, dem: string, output: string, zfact
     ##
     ## - dem: Input raster DEM file.
     ## - output: Output raster file.
+    ## - log: Display output values using a log-scale.
     ## - zfactor: Optional multiplier for when the vertical and horizontal units are not the same.
     var args = newSeq[string]()
     args.add(fmt"--dem={dem}")
     args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
     if zfactor.isSome:
         args.add(fmt"--zfactor={zfactor}")
     result = self.runTool("TotalCurvature", args)
@@ -7466,6 +8791,23 @@ proc unsharpMasking*(self: var WhiteboxTools, input: string, output: string, sig
     args.add(fmt"--threshold={threshold}")
     result = self.runTool("UnsharpMasking", args)
 
+proc unsphericity*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates the unsphericity curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#Unsphericity) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("Unsphericity", args)
+
 proc updateNodataCells*(self: var WhiteboxTools, input1: string, input2: string, output: string): byte =
     ## Replaces the NoData values in an input raster with the corresponding values contained in a second update layer.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/gis_analysis_overlay_tools.html#UpdateNodataCells) for more details.
@@ -7597,6 +8939,42 @@ proc vectorPolygonsToRaster*(self: var WhiteboxTools, input: string, field: stri
         args.add(fmt"--cell_size={cell_size}")
     args.add(fmt"--base={base}")
     result = self.runTool("VectorPolygonsToRaster", args)
+
+proc vectorStreamNetworkAnalysis*(self: var WhiteboxTools, streams: string, dem: string, output: string, cutting_height: float = 10.0, snap: float = 0.1): byte =
+    ## This tool performs common stream network analysis operations on an input vector stream file.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/stream_network_analysis.html#VectorStreamNetworkAnalysis) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - streams: Name of the input streams vector file.
+    ## - dem: Name of the input DEM raster file.
+    ## - output: Name of the output lines shapefile.
+    ## - cutting_height: Maximum ridge-cutting height (z units).
+    ## - snap: Snap distance, in xy units (metres).
+    var args = newSeq[string]()
+    args.add(fmt"--streams={streams}")
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--cutting_height={cutting_height}")
+    args.add(fmt"--snap={snap}")
+    result = self.runTool("VectorStreamNetworkAnalysis", args)
+
+proc verticalExcessCurvature*(self: var WhiteboxTools, dem: string, output: string, log: bool = false, zfactor: float = 1.0): byte =
+    ## This tool calculates vertical excess curvature from an input DEM.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/geomorphometric_analysis.html#VerticalExcessCurvature) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - dem: Name of the input raster DEM file.
+    ## - output: Name of the output raster image file.
+    ## - log: Display output values using a log-scale.
+    ## - zfactor: Z conversion factor.
+    var args = newSeq[string]()
+    args.add(fmt"--dem={dem}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--log={log}")
+    args.add(fmt"--zfactor={zfactor}")
+    result = self.runTool("VerticalExcessCurvature", args)
 
 proc viewshed*(self: var WhiteboxTools, dem: string, stations: string, output: string, height: float = 2.0): byte =
     ## Identifies the viewshed for a point or set of points.
@@ -7763,6 +9141,74 @@ proc Xor*(self: var WhiteboxTools, input1: string, input2: string, output: strin
     args.add(fmt"--output={output}")
     result = self.runTool("Xor", args)
 
+proc yieldFilter*(self: var WhiteboxTools, input: string, yield_field: string, pass_field: string, output: string, width: float = 6.096, z_score_threshold: float = 2.5, min_yield: float = 0.0, max_yield: float = 99999.9): byte =
+    ## Filters crop yield values of point data derived from combine harvester yield monitors.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#YieldFilter) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - yield_field: Name of the attribute containing yield data.
+    ## - pass_field: Name of the attribute containing pass line ID.
+    ## - output: Name of the output points shapefile.
+    ## - width: Pass swath width (m).
+    ## - z_score_threshold: Z-score threshold value (default=2.5).
+    ## - min_yield: Minimum yield value in output.
+    ## - max_yield: Maximum yield value in output.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--yield_field={yield_field}")
+    args.add(fmt"--pass_field={pass_field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--width={width}")
+    args.add(fmt"--z_score_threshold={z_score_threshold}")
+    args.add(fmt"--min_yield={min_yield}")
+    args.add(fmt"--max_yield={max_yield}")
+    result = self.runTool("YieldFilter", args)
+
+proc yieldMap*(self: var WhiteboxTools, input: string, pass_field_name: string, output: string, width: float = 6.096, max_change_in_heading: float = 25.0): byte =
+    ## This tool can be used to create a segmented-vector polygon yield map from a set of harvester points.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#YieldMap) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - pass_field_name: Name of the attribute containing pass line ID.
+    ## - output: Name of the output polygon shapefile.
+    ## - width: Pass swath width (m).
+    ## - max_change_in_heading: Max change in heading.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--pass_field_name={pass_field_name}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--width={width}")
+    args.add(fmt"--max_change_in_heading={max_change_in_heading}")
+    result = self.runTool("YieldMap", args)
+
+proc yieldNormalization*(self: var WhiteboxTools, input: string, yield_field: string, output: string, standardize: bool = false, radius = none(float), min_yield: float = 0.0, max_yield: float = 99999.9): byte =
+    ## This tool can be used to normalize the yield points for a field.
+    ## See [here](https://jblindsay.github.io/wbt_book/available_tools/precision_agriculture.html#YieldNormalization) for more details.
+    ##
+    ## Keyword arguments:
+    ##
+    ## - input: Name of the input points shapefile.
+    ## - yield_field: Name of the attribute containing yield data.
+    ## - output: Name of the output points shapefile.
+    ## - standardize: Should the yield values be standardized (converted to z-scores) rather than normalized?
+    ## - radius: Optional search radius, in metres. Only specify this value if you want to calculate locally normalized yield.
+    ## - min_yield: Minimum yield value in output.
+    ## - max_yield: Maximum yield value in output.
+    var args = newSeq[string]()
+    args.add(fmt"--input={input}")
+    args.add(fmt"--yield_field={yield_field}")
+    args.add(fmt"--output={output}")
+    args.add(fmt"--standardize={standardize}")
+    if radius.isSome:
+        args.add(fmt"--radius={radius}")
+    args.add(fmt"--min_yield={min_yield}")
+    args.add(fmt"--max_yield={max_yield}")
+    result = self.runTool("YieldNormalization", args)
+
 proc zScores*(self: var WhiteboxTools, input: string, output: string): byte =
     ## Standardizes the values in an input raster by converting to z-scores.
     ## See [here](https://jblindsay.github.io/wbt_book/available_tools/mathand_stats_tools.html#ZScores) for more details.
@@ -7807,7 +9253,7 @@ proc zonalStatistics*(self: var WhiteboxTools, input: string, features: string, 
     args.add(fmt"--stat={stat}")
     args.add(fmt"--out_table={out_table}")
     result = self.runTool("ZonalStatistics", args)
-    
+        
 proc generateFunctions() =
     var 
         wbt = newWhiteboxTools()
@@ -7818,7 +9264,7 @@ proc generateFunctions() =
         lineNum = 1
         funcSig: string
 
-    wbt.setExecutableDirectory("/Users/johnlindsay/Documents/programming/whitebox-tools/target/release/")
+    wbt.setExecutableDirectory("/Users/johnlindsay/Documents/programming/Rust/WBT/")
 
     let toolsList = wbt.listTools()
     for a in toolsList.splitLines:
